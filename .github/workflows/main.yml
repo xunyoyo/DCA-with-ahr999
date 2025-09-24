@@ -1,5 +1,4 @@
 # .github/workflows/main.yml
-
 name: Daily Investment Bot Runner
 
 on:
@@ -11,28 +10,23 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    # [MODIFIED] Give the job write permissions to the repository
     permissions:
       contents: write
 
     steps:
-      # 1. Checks-out your repository
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. Sets up Python environment
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      # 3. Installs dependencies
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # 4. Runs the trading bot script
       - name: Run Trading Bot
         env:
           OKX_API_KEY: ${{ secrets.OKX_API_KEY }}
@@ -42,7 +36,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python trade_bot.py
 
-      # 5. [NEW] Commit and push changes (if any)
       - name: Commit and Push Results
         run: |
           git config --global user.name 'github-actions[bot]'
