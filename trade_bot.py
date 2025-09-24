@@ -1,4 +1,4 @@
-# trade_bot.py (The correct, non-interactive version for GitHub Actions)
+# trade_bot.py (Final version with enhanced issue logging)
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -131,6 +131,11 @@ def main():
 
     final_issue_title = "❓ Bot Run Status Unknown"
     final_issue_body = "The bot run did not complete as expected."
+    
+    # Initialize log content variables
+    market_data_log = ""
+    decision_log = ""
+    execution_log = ""
 
     try:
         api_key = os.getenv("OKX_API_KEY"); secret_key = os.getenv("OKX_SECRET_KEY"); password = os.getenv("OKX_PASSWORD")
@@ -150,11 +155,17 @@ def main():
         investment_amount = investment_data["investment_usd"]
         price_now = investment_data["price_today"]
         
+        market_data_log = (
+            f"### 📊 Market Data\n"
+            f"- **Timestamp:** `{start_time.strftime('%Y-%m-%d %H:%M:%S')}` UTC\n"
+            f"- **Current Price ({OKX_SYMBOL}):** `${price_now}`\n"
+            f"- **AHR999 Index:** `{investment_data['ahr999_index']:.4f}`"
+        )
+        
         decision_log = (
-            f"### Market Data\n"
-            f"- **Current Price ({OKX_SYMBOL}):** ${price_now}\n"
-            f"- **AHR999 Index:** {investment_data['ahr999_index']:.4f}\n\n"
-            f"### Investment Decision\n"
+            f"### 🤖 Investment Decision\n"
+            f"- **Strategy:** Personalized AHR999\n"
+            f"- **Baseline:** `${BASELINE_INVESTMENT}`\n"
             f"- **Calculated Investment:** `${investment_amount}`"
         )
         
@@ -173,18 +184,33 @@ def main():
             print(f"✅ Appended transaction to {LOG_FILE}")
             
             final_issue_title = f"✅ Trade Successful: Bought ${log_entry['buy_usd']:.2f} of {OKX_SYMBOL}"
-            final_issue_body = f"{decision_log}\n\n### Trade Execution: `SUCCESS`\n- **Order ID:** `{order['id']}`"
+            execution_log = (
+                f"### 📈 Trade Execution\n"
+                f"- **Status:** `SUCCESS`\n"
+                f"- **Order ID:** `{order['id']}`\n"
+                f"- **Filled (BTC):** `{order.get('filled', 'N/A')}`\n"
+                f"- **Cost (USDT):** `{order.get('cost', 'N/A')}`\n"
+                f"- **Average Price:** `{order.get('average', 'N/A')}`"
+            )
         else:
             print("Investment amount too small, skipping trade and logging.")
             final_issue_title = f"🟡 Trade Skipped: Amount was ${investment_amount}"
-            final_issue_body = f"{decision_log}\n\n### Trade Execution: `SKIPPED`"
+            execution_log = (
+                f"### 📈 Trade Execution\n"
+                f"- **Status:** `SKIPPED`\n"
+                f"- **Reason:** Calculated investment amount is below the minimum trade size of $1."
+            )
 
     except Exception as e:
         final_issue_title = f"🔴 TRADE FAILED"
-        final_issue_body = f"An error occurred: \n```\n{e}\n```"
+        # Only include market/decision logs if they were populated
+        error_details = f"An error occurred: \n```\n{e}\n```"
+        execution_log = f"### 📈 Trade Execution\n- **Status:** `FAILED`\n\n{error_details}"
         print(f"🔴🔴🔴 An error occurred: {e} 🔴🔴🔴")
 
     finally:
+        # --- Assemble and Create Final Issue ---
+        final_issue_body = "\n\n".join(filter(None, [market_data_log, decision_log, execution_log]))
         generate_roi_chart()
         end_time = dt.datetime.now(dt.timezone.utc)
         duration = end_time - start_time
