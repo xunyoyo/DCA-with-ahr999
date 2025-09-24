@@ -1,12 +1,11 @@
-# trade_bot.py (Final version with enhanced issue logging)
+# trade_bot.py (Final version with Portfolio Summary Report)
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Daily Investment Bot for OKX with Persistent Logging & Charting
-----------------------------------------------------------------
-This bot executes a personalized AHR999 strategy, logs every transaction
-to a CSV file in the repo, and regenerates an ROI chart after each run.
-This version is designed for non-interactive, automated execution.
+Daily Investment Bot for OKX with Persistent Logging, Charting & Portfolio Summary
+------------------------------------------------------------------------------------
+This bot executes a personalized AHR999 strategy, logs every transaction,
+regenerates an ROI chart, and posts a full portfolio summary to a GitHub Issue.
 """
 
 import os
@@ -36,7 +35,7 @@ LOG_FILE = "trade_log.csv"
 CHART_FILE = "roi_chart.png"
 
 # ==============================================================================
-# SECTION 2: GITHUB & CHARTING HELPERS
+# SECTION 2: GITHUB, CHARTING & SUMMARY HELPERS
 # ==============================================================================
 def create_github_issue(title: str, body: str):
     repo_slug = os.getenv("GITHUB_REPOSITORY"); token = os.getenv("GITHUB_TOKEN")
@@ -56,8 +55,8 @@ def create_github_issue(title: str, body: str):
         print(f"An error occurred while creating GitHub issue: {e}")
 
 def generate_roi_chart():
-    if not os.path.exists(LOG_FILE):
-        print("Log file not found, skipping chart generation.")
+    if not os.path.exists(LOG_FILE) or os.path.getsize(LOG_FILE) == 0:
+        print("Log file not found or empty, skipping chart generation.")
         return
     log_df = pd.read_csv(LOG_FILE)
     if len(log_df) < 2:
@@ -66,8 +65,10 @@ def generate_roi_chart():
     log_df['date'] = pd.to_datetime(log_df['date'])
     log_df['invest_cum'] = log_df['buy_usd'].cumsum()
     log_df['hold_btc_cum'] = log_df['buy_btc'].cumsum()
+    # Use the last known price for each day to calculate historical value
     log_df['value_usd'] = log_df['hold_btc_cum'] * log_df['price_usd']
     log_df['roi'] = log_df['value_usd'] / log_df['invest_cum'] - 1
+
     plt.style.use('seaborn-v0_8-darkgrid')
     fig, ax = plt.subplots(figsize=(12, 7))
     ax.plot(log_df['date'], log_df['roi'] * 100, label="Portfolio ROI", color='dodgerblue')
@@ -84,6 +85,44 @@ def generate_roi_chart():
     plt.savefig(CHART_FILE, dpi=120)
     print(f"✅ Successfully generated and saved ROI chart to {CHART_FILE}")
     plt.close()
+
+def calculate_portfolio_summary(current_price: float) -> str:
+    """Reads the log file and calculates a full portfolio summary."""
+    if not os.path.exists(LOG_FILE) or os.path.getsize(LOG_FILE) == 0:
+        return "### 📊 Portfolio Summary\n- No trading history found yet."
+
+    try:
+        log_df = pd.read_csv(LOG_FILE)
+        if log_df.empty:
+            return "### 📊 Portfolio Summary\n- No trading history found yet."
+
+        total_invested_usd = log_df['buy_usd'].sum()
+        total_holdings_btc = log_df['buy_btc'].sum()
+
+        if total_invested_usd <= 0 or total_holdings_btc <= 0:
+            return "### 📊 Portfolio Summary\n- No investment recorded yet."
+
+        current_value_usd = total_holdings_btc * current_price
+        average_buy_price = total_invested_usd / total_holdings_btc
+        profit_loss_usd = current_value_usd - total_invested_usd
+        roi_percentage = (profit_loss_usd / total_invested_usd) * 100
+
+        pl_sign = "+" if profit_loss_usd >= 0 else ""
+        pl_emoji = "🟢" if profit_loss_usd >= 0 else "🔴"
+
+        summary = (
+            f"### 📊 Portfolio Summary\n"
+            f"- **Total Principal Invested:** `${total_invested_usd:,.2f}`\n"
+            f"- **Total Holdings:** `{total_holdings_btc:.8f}` BTC\n"
+            f"- **Current Portfolio Value:** `${current_value_usd:,.2f}`\n"
+            f"- **Average Buy Price:** `${average_buy_price:,.2f}`\n"
+            f"- **Total Profit/Loss:** {pl_emoji} `{pl_sign}${profit_loss_usd:,.2f}`\n"
+            f"- **Return on Investment (ROI):** `{pl_sign}{roi_percentage:.2f}%`"
+        )
+        return summary
+    except Exception as e:
+        print(f"Error calculating portfolio summary: {e}")
+        return f"### 📊 Portfolio Summary\n- Error calculating summary: {e}"
 
 # ==============================================================================
 # SECTION 3: CORE LOGIC
@@ -116,11 +155,7 @@ def get_today_investment_amount(historical_df: pd.DataFrame, baseline: float) ->
             if ahr999_today < PULSE_THRESHOLD:
                 buy_usd_ahr += baseline
             buy_usd_ahr = min(buy_usd_ahr, baseline * DAILY_CAP_X)
-    return {
-        "investment_usd": round(buy_usd_ahr, 4),
-        "price_today": price_today,
-        "ahr999_index": ahr999_today
-    }
+    return { "investment_usd": round(buy_usd_ahr, 4), "price_today": price_today, "ahr999_index": ahr999_today }
 
 def main():
     start_time = dt.datetime.now(dt.timezone.utc)
@@ -130,15 +165,10 @@ def main():
     )
 
     final_issue_title = "❓ Bot Run Status Unknown"
-    final_issue_body = "The bot run did not complete as expected."
-    
-    # Initialize log content variables
-    market_data_log = ""
-    decision_log = ""
-    execution_log = ""
+    portfolio_summary_log = market_data_log = decision_log = execution_log = ""
 
     try:
-        api_key = os.getenv("OKX_API_KEY"); secret_key = os.getenv("OKX_SECRET_KEY"); password = os.getenv("OKX_PASSWORD")
+        api_key=os.getenv("OKX_API_KEY"); secret_key=os.getenv("OKX_SECRET_KEY"); password=os.getenv("OKX_PASSWORD")
         if not all([api_key, secret_key, password]):
             raise ValueError("API credentials not found.")
 
@@ -155,8 +185,11 @@ def main():
         investment_amount = investment_data["investment_usd"]
         price_now = investment_data["price_today"]
         
+        # Calculate portfolio summary BEFORE making the trade
+        portfolio_summary_log = calculate_portfolio_summary(price_now)
+        
         market_data_log = (
-            f"### 📊 Market Data\n"
+            f"### Market Data\n"
             f"- **Timestamp:** `{start_time.strftime('%Y-%m-%d %H:%M:%S')}` UTC\n"
             f"- **Current Price ({OKX_SYMBOL}):** `${price_now}`\n"
             f"- **AHR999 Index:** `{investment_data['ahr999_index']:.4f}`"
@@ -176,7 +209,7 @@ def main():
             log_entry = {
                 'date': dt.date.today().isoformat(),
                 'buy_usd': order.get('cost', investment_amount),
-                'buy_btc': order.get('filled', (investment_amount / price_now)),
+                'buy_btc': order.get('filled', (investment_amount / order.get('average', price_now))),
                 'price_usd': order.get('average', price_now)
             }
             header = not os.path.exists(LOG_FILE)
@@ -193,30 +226,29 @@ def main():
                 f"- **Average Price:** `{order.get('average', 'N/A')}`"
             )
         else:
-            print("Investment amount too small, skipping trade and logging.")
+            print("Investment amount too small, skipping trade.")
             final_issue_title = f"🟡 Trade Skipped: Amount was ${investment_amount}"
             execution_log = (
                 f"### 📈 Trade Execution\n"
                 f"- **Status:** `SKIPPED`\n"
                 f"- **Reason:** Calculated investment amount is below the minimum trade size of $1."
             )
-
     except Exception as e:
         final_issue_title = f"🔴 TRADE FAILED"
-        # Only include market/decision logs if they were populated
         error_details = f"An error occurred: \n```\n{e}\n```"
         execution_log = f"### 📈 Trade Execution\n- **Status:** `FAILED`\n\n{error_details}"
         print(f"🔴🔴🔴 An error occurred: {e} 🔴🔴🔴")
-
     finally:
-        # --- Assemble and Create Final Issue ---
-        final_issue_body = "\n\n".join(filter(None, [market_data_log, decision_log, execution_log]))
+        # After a potential trade, recalculate summary for the most up-to-date report
+        if 'price_now' in locals():
+            portfolio_summary_log = calculate_portfolio_summary(price_now)
+
+        final_issue_body = "\n\n".join(filter(None, [portfolio_summary_log, market_data_log, decision_log, execution_log]))
         generate_roi_chart()
         end_time = dt.datetime.now(dt.timezone.utc)
         duration = end_time - start_time
         final_issue_body += f"\n\n---\n*Bot run finished. Duration: `{str(duration).split('.')[0]}`.*"
         create_github_issue(final_issue_title, final_issue_body)
-        
         print(f"\nBot finished at {end_time.isoformat()}")
 
 if __name__ == "__main__":
