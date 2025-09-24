@@ -1,0 +1,6 @@
+pandas
+numpy
+ccxt
+requests
+python-dotenv
+matplotlib
