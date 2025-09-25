@@ -1,13 +1,13 @@
-# trade_bot.py (Final Safety-Patched Version v2 - Type Safe)
+# trade_bot.py (Final Safety-Patched Version v3 - OKX Compatible)
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Daily Investment Bot for OKX with Persistent Logging, Charting & Portfolio Summary
 ------------------------------------------------------------------------------------
-This is a safety-patched version that FIXES multiple critical bugs:
-- [CRITICAL FIX v1] Changed the trade execution call to use the explicit 'cost' parameter.
-- [CRITICAL FIX v1] Removed the dangerous "Pulse" logic that caused over-investment.
-- [ROBUSTNESS FIX v1] Added comprehensive checks for empty log files to prevent crashes.
+This is the final, safety-patched version that:
+- [CRITICAL FIX v3] Uses the unified create_market_buy_order_with_cost method for OKX compatibility.
+- [CRITICAL FIX v1] Removed the dangerous "Pulse" logic.
+- [ROBUSTNESS FIX v1] Added comprehensive checks for empty log files.
 - [ROBUSTNESS FIX v2] Added a type check for 'investment_amount' to prevent NoneType errors.
 """
 
@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
 # ==============================================================================
-# SECTION 1: FINAL STRATEGY PARAMETERS (No changes here)
+# SECTION 1: FINAL STRATEGY PARAMETERS
 # ==============================================================================
 BASELINE_INVESTMENT = 5.0
 OKX_SYMBOL = "BTC/USDT"
@@ -37,8 +37,9 @@ LOG_FILE = "trade_log.csv"
 CHART_FILE = "roi_chart.png"
 
 # ==============================================================================
-# SECTION 2: GITHUB, CHARTING & SUMMARY HELPERS (No changes here)
+# SECTION 2: GITHUB, CHARTING & SUMMARY HELPERS
 # ==============================================================================
+# (This entire section is correct and remains unchanged)
 def create_github_issue(title: str, body: str):
     repo_slug=os.getenv("GITHUB_REPOSITORY"); token=os.getenv("GITHUB_TOKEN")
     if not repo_slug or not token: return
@@ -53,7 +54,7 @@ def create_github_issue(title: str, body: str):
 def generate_roi_chart():
     if not os.path.exists(LOG_FILE) or os.path.getsize(LOG_FILE) == 0: return
     try:
-        log_df = pd.read_csv(LOG_FILE)
+        log_df = pd.read_csv(LOG_FILE);
         if len(log_df) < 2: return
         log_df['date']=pd.to_datetime(log_df['date']); log_df['invest_cum']=log_df['buy_usd'].cumsum()
         log_df['hold_btc_cum']=log_df['buy_btc'].cumsum(); log_df['value_usd']=log_df['hold_btc_cum']*log_df['price_usd']
@@ -72,7 +73,7 @@ def generate_roi_chart():
 def calculate_portfolio_summary(current_price: float) -> str:
     if not os.path.exists(LOG_FILE) or os.path.getsize(LOG_FILE) == 0: return "### 📊 Portfolio Summary\n- No trading history found yet."
     try:
-        log_df = pd.read_csv(LOG_FILE)
+        log_df = pd.read_csv(LOG_FILE);
         if log_df.empty: return "### 📊 Portfolio Summary\n- Trading log is empty."
         total_invested_usd=log_df['buy_usd'].sum(); total_holdings_btc=log_df['buy_btc'].sum()
         if total_invested_usd <= 0 or total_holdings_btc <= 0: return "### 📊 Portfolio Summary\n- No valid investment recorded."
@@ -86,8 +87,9 @@ def calculate_portfolio_summary(current_price: float) -> str:
     except Exception as e: return f"### 📊 Portfolio Summary\n- Error calculating summary: {e}"
 
 # ==============================================================================
-# SECTION 3: CORE LOGIC (No changes here, the functions are correct)
+# SECTION 3: CORE LOGIC
 # ==============================================================================
+# (These functions are correct and remain unchanged)
 def index_growth_estimate(age_days: int) -> float:
     age_days=max(1, age_days); return 10**(5.84*math.log10(age_days)-17.01)
 
@@ -132,11 +134,12 @@ def main():
                          f"- **Price ({OKX_SYMBOL}):** `${price_now}`\n- **AHR999 Index:** `{investment_data['ahr999_index']:.4f}`")
         decision_log=(f"### 🤖 Investment Decision\n- **Calculated Investment:** `${investment_amount}`")
         
-        # [ROBUSTNESS FIX v2] Check if investment_amount is a valid number before comparing.
         if isinstance(investment_amount, (int, float)) and investment_amount > 1:
-            print(f"Placing UNAMBIGUOUS market buy order to SPEND ${investment_amount}...")
-            # Use the explicit 'cost' parameter for market buy orders.
-            order = exchange.create_order(OKX_SYMBOL, 'market', 'buy', amount=None, params={'cost': investment_amount})
+            print(f"Placing market buy order to SPEND ${investment_amount} on {OKX_SYMBOL}...")
+            
+            # [CRITICAL FIX v3] Use the modern, unambiguous 'create_market_buy_order_with_cost' method.
+            # This method is specifically designed for "I want to spend X amount of quote currency".
+            order = exchange.create_market_buy_order_with_cost(OKX_SYMBOL, investment_amount)
 
             filled_btc = order.get('filled')
             avg_price = order.get('average', price_now)
