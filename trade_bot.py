@@ -1,12 +1,12 @@
-# trade_bot.py (Final Robust Version v5.1 - True Logic Refactor)
+# trade_bot.py (Final Robust Version v5.2 - Order Parsing Fallback)
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Daily Investment Bot for OKX with Persistent Logging, Charting & Portfolio Summary
 ------------------------------------------------------------------------------------
-This is the final, refactored version with a rock-solid execution flow.
-The final report in the Issue is generated EXCLUSIVELY from the final state
-of the CSV log file, ensuring data consistency across all runs.
+This is the final, safety-patched version with a rock-solid execution flow.
+- [CRITICAL FIX v5.2] Adds a robust fallback mechanism for parsing order results
+  from OKX, ensuring the CSV log is always populated correctly.
 """
 
 import os
@@ -37,6 +37,7 @@ CHART_FILE = "roi_chart.png"
 # ==============================================================================
 # SECTION 2: HELPERS (Unchanged, they are robust)
 # ==============================================================================
+# (This entire section is correct and remains unchanged)
 def create_github_issue(title: str, body: str):
     repo_slug=os.getenv("GITHUB_REPOSITORY"); token=os.getenv("GITHUB_TOKEN")
     if not repo_slug or not token: return
@@ -113,14 +114,12 @@ def main():
     start_time = dt.datetime.now(dt.timezone.utc)
     create_github_issue(f"🚀 Bot Run Started at {start_time.strftime('%Y-%m-%d %H:%M:%S')} UTC", "Starting daily investment process...")
     
-    # Initialize variables that will be populated in the try block
     final_issue_title = "❓ Bot Run Status Unknown"
     execution_log = ""
     investment_data = {}
     price_now = None
 
     try:
-        # --- 1. FETCH DATA & DECIDE ACTION ---
         api_key=os.getenv("OKX_API_KEY"); secret_key=os.getenv("OKX_SECRET_KEY"); password=os.getenv("OKX_PASSWORD")
         if not all([api_key, secret_key, password]): raise ValueError("API credentials not found.")
         exchange=ccxt.okx({'apiKey': api_key, 'secret': secret_key, 'password': password, 'options': {'defaultType': 'spot'}})
@@ -133,28 +132,37 @@ def main():
         investment_data=get_today_investment_amount(historical_df, BASELINE_INVESTMENT)
         investment_amount=investment_data["investment_usd"]; price_now=investment_data["price_today"]
 
-        # --- 2. EXECUTE & RECORD ---
         if investment_amount is not None and math.isfinite(investment_amount) and investment_amount > 1:
             print(f"Placing market buy order to SPEND ${investment_amount}...")
             order = exchange.create_market_buy_order_with_cost(OKX_SYMBOL, investment_amount)
             
-            # Prepare new log entry
-            filled_btc = order.get('filled'); avg_price = order.get('average', price_now)
-            if not filled_btc and avg_price and avg_price > 0: filled_btc = investment_amount / avg_price
-            new_log_entry = {'date': dt.date.today().isoformat(), 'buy_usd': order.get('cost', investment_amount),
-                             'buy_btc': filled_btc, 'price_usd': avg_price}
+            # --- [CRITICAL FIX v5.2] Robustly parse order results with fallbacks ---
+            # Priority: 1. From order object, 2. From our own data, 3. Safe default (0)
+            final_cost = order.get('cost', 0) or investment_amount
+            final_filled = order.get('filled', 0)
+            final_average = order.get('average', 0) or price_now
+            
+            # If filled is still missing, calculate it as a last resort
+            if not final_filled and final_cost > 0 and final_average > 0:
+                final_filled = final_cost / final_average
+
+            new_log_entry = {'date': dt.date.today().isoformat(),
+                             'buy_usd': final_cost,
+                             'buy_btc': final_filled,
+                             'price_usd': final_average}
             
             # Read, append, and save
             try:
                 log_df = pd.read_csv(LOG_FILE) if os.path.exists(LOG_FILE) and os.path.getsize(LOG_FILE) > 0 else pd.DataFrame()
                 log_df = pd.concat([log_df, pd.DataFrame([new_log_entry])], ignore_index=True)
                 log_df.to_csv(LOG_FILE, index=False)
-                print(f"✅ Appended transaction to {LOG_FILE}")
+                print(f"✅ Appended transaction to {LOG_FILE}: {new_log_entry}")
             except Exception as e:
                 print(f"Error while updating CSV log: {e}")
             
             final_issue_title = f"✅ Trade Successful: Spent ${new_log_entry['buy_usd']:.2f} on {OKX_SYMBOL}"
-            execution_log = f"### 📈 Trade Execution\n- **Status:** `SUCCESS`\n- **Order ID:** `{order['id']}`"
+            execution_log = f"### 📈 Trade Execution\n- **Status:** `SUCCESS`\n- **Order ID:** `{order.get('id', 'N/A')}`"
+
         else:
             final_issue_title = f"🟡 Trade Skipped: Amount was `{investment_amount}`"
             execution_log = f"### 📈 Trade Execution\n- **Status:** `SKIPPED`"
@@ -166,22 +174,16 @@ def main():
         print(f"🔴🔴🔴 An error occurred: {e} 🔴🔴🔴")
     
     finally:
-        # --- 3. REPORTING ---
-        # This block is now a pure "reporter". It reads the final state of the world.
-        
-        # Read the final state of the log file, whatever happened in the try block
         final_log_df = None
         if os.path.exists(LOG_FILE) and os.path.getsize(LOG_FILE) > 0:
             final_log_df = pd.read_csv(LOG_FILE)
             
-        # Generate summary and chart based on this final, single source of truth
         if price_now and math.isfinite(price_now):
             portfolio_summary_log = calculate_portfolio_summary(final_log_df, price_now)
             generate_roi_chart(final_log_df)
         else:
             portfolio_summary_log = "### 📊 Portfolio Summary\n- Could not fetch current price to generate summary."
 
-        # Assemble the rest of the report from variables populated in the try block
         market_data_log = (f"### Market Data\n- **Timestamp:** `{start_time.strftime('%Y-%m-%d %H:%M:%S')}` UTC\n"
                            f"- **Price ({OKX_SYMBOL}):** `{price_now}`\n- **AHR999 Index:** `{investment_data.get('ahr999_index', 'N/A')}`")
         decision_log = (f"### 🤖 Investment Decision\n- **Calculated Investment:** `{investment_data.get('investment_usd', 'N/A')}`")
