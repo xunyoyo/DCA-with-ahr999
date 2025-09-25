@@ -1,12 +1,13 @@
-# trade_bot.py (Final Robust Version v5.2 - Order Parsing Fallback)
+# trade_bot.py (Final Dashboard Version v6.0)
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Daily Investment Bot for OKX with Persistent Logging, Charting & Portfolio Summary
-------------------------------------------------------------------------------------
-This is the final, safety-patched version with a rock-solid execution flow.
-- [CRITICAL FIX v5.2] Adds a robust fallback mechanism for parsing order results
-  from OKX, ensuring the CSV log is always populated correctly.
+Daily Investment Bot for OKX with Multi-Chart Dashboard
+---------------------------------------------------------
+This final version generates a full dashboard of charts:
+1. Return on Investment (ROI) Curve
+2. Portfolio Equity Curve (Net Asset Value)
+3. Cumulative Cost vs. Portfolio Value
 """
 
 import os
@@ -32,13 +33,12 @@ DAILY_CAP_X = 4.0
 PAUSE_THRESHOLD = 2.0
 NEUTRAL_X = 1.0
 LOG_FILE = "trade_log.csv"
-CHART_FILE = "roi_chart.png"
 
 # ==============================================================================
-# SECTION 2: HELPERS (Unchanged, they are robust)
+# SECTION 2: HELPERS (Now includes multiple chart functions)
 # ==============================================================================
-# (This entire section is correct and remains unchanged)
 def create_github_issue(title: str, body: str):
+    # (This function is perfect and remains unchanged)
     repo_slug=os.getenv("GITHUB_REPOSITORY"); token=os.getenv("GITHUB_TOKEN")
     if not repo_slug or not token: return
     url=f"https://api.github.com/repos/{repo_slug}/issues"
@@ -49,32 +49,82 @@ def create_github_issue(title: str, body: str):
         if response.status_code != 201: print(f"Failed to create GitHub issue: {response.status_code} {response.text}")
     except Exception as e: print(f"Error creating GitHub issue: {e}")
 
-def generate_roi_chart(log_df: pd.DataFrame):
+# --- NEW: Charting Sub-functions ---
+def _plot_roi_curve(ax, df):
+    ax.plot(df['date'], df['roi'] * 100, label="Portfolio ROI", color='dodgerblue')
+    ax.axhline(0, color='grey', linewidth=0.8, linestyle='--')
+    ax.set_title("1. Return on Investment (ROI)", fontsize=16)
+    ax.set_ylabel("ROI (%)")
+    ax.yaxis.set_major_formatter(plt.FuncFormatter('{:.0f}%'.format))
+
+def _plot_equity_curve(ax, df):
+    ax.plot(df['date'], df['value_usd'], label="Portfolio Value", color='green')
+    ax.set_title("2. Portfolio Equity Curve", fontsize=16)
+    ax.set_ylabel("Portfolio Value (USD)")
+    ax.yaxis.set_major_formatter(plt.FuncFormatter('${:,.0f}'.format))
+
+def _plot_value_vs_cost(ax, df):
+    ax.plot(df['date'], df['value_usd'], label="Portfolio Value", color='green')
+    ax.plot(df['date'], df['invest_cum'], label="Cumulative Cost", color='red', linestyle='--')
+    ax.fill_between(df['date'], df['invest_cum'], df['value_usd'], 
+                    where=df['value_usd'] >= df['invest_cum'], 
+                    facecolor='green', alpha=0.3, interpolate=True)
+    ax.fill_between(df['date'], df['invest_cum'], df['value_usd'], 
+                    where=df['value_usd'] < df['invest_cum'], 
+                    facecolor='red', alpha=0.3, interpolate=True)
+    ax.set_title("3. Portfolio Value vs. Cumulative Cost", fontsize=16)
+    ax.set_ylabel("Amount (USD)")
+    ax.yaxis.set_major_formatter(plt.FuncFormatter('${:,.0f}'.format))
+
+def generate_dashboard_charts(log_df: pd.DataFrame):
     if log_df is None or len(log_df) < 2:
-        print("Not enough data to generate a chart.")
+        print("Not enough data to generate charts.")
         return
+    
     try:
         df = log_df.copy()
-        df['date']=pd.to_datetime(df['date']); df['invest_cum']=df['buy_usd'].cumsum()
-        df['hold_btc_cum']=df['buy_btc'].cumsum(); df['value_usd']=df['hold_btc_cum']*df['price_usd']
-        df['roi']=df['value_usd']/df['invest_cum']-1
-        plt.style.use('seaborn-v0_8-darkgrid'); fig, ax=plt.subplots(figsize=(12, 7))
-        ax.plot(df['date'], df['roi']*100, label="Portfolio ROI", color='dodgerblue')
-        ax.axhline(0, color='grey', linewidth=0.8, linestyle='--')
-        ax.set_title(f"Portfolio ROI - Last Updated: {dt.date.today().isoformat()}", fontsize=16)
-        ax.set_xlabel("Date"); ax.set_ylabel("ROI (%)")
-        ax.yaxis.set_major_formatter(plt.FuncFormatter('{:.0f}%'.format)); ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-        fig.autofmt_xdate(); ax.grid(True, which='both', linestyle=':'); ax.legend()
-        plt.tight_layout(); plt.savefig(CHART_FILE, dpi=120); plt.close()
-        print(f"✅ Chart generated: {CHART_FILE}")
-    except Exception as e: print(f"Could not generate chart: {e}")
+        df['date'] = pd.to_datetime(df['date'])
+        df['invest_cum'] = df['buy_usd'].cumsum()
+        df['hold_btc_cum'] = df['buy_btc'].cumsum()
+        df['value_usd'] = df['hold_btc_cum'] * df['price_usd']
+        df['roi'] = (df['value_usd'] / df['invest_cum'] - 1).fillna(0)
+
+        plt.style.use('seaborn-v0_8-darkgrid')
+        
+        # --- Plot 1: ROI Curve (Saves to roi_chart.png) ---
+        fig1, ax1 = plt.subplots(figsize=(12, 7))
+        _plot_roi_curve(ax1, df)
+        ax1.legend(); ax1.grid(True, which='both', linestyle=':')
+        fig1.autofmt_xdate(); plt.tight_layout()
+        plt.savefig("roi_chart.png", dpi=120); plt.close(fig1)
+        print(f"✅ Chart generated: roi_chart.png")
+
+        # --- Plot 2: Equity Curve (Saves to equity_curve.png) ---
+        fig2, ax2 = plt.subplots(figsize=(12, 7))
+        _plot_equity_curve(ax2, df)
+        ax2.legend(); ax2.grid(True, which='both', linestyle=':')
+        fig2.autofmt_xdate(); plt.tight_layout()
+        plt.savefig("equity_curve.png", dpi=120); plt.close(fig2)
+        print(f"✅ Chart generated: equity_curve.png")
+
+        # --- Plot 3: Value vs Cost (Saves to value_vs_cost.png) ---
+        fig3, ax3 = plt.subplots(figsize=(12, 7))
+        _plot_value_vs_cost(ax3, df)
+        ax3.legend(); ax3.grid(True, which='both', linestyle=':')
+        fig3.autofmt_xdate(); plt.tight_layout()
+        plt.savefig("value_vs_cost.png", dpi=120); plt.close(fig3)
+        print(f"✅ Chart generated: value_vs_cost.png")
+
+    except Exception as e:
+        print(f"Could not generate dashboard charts: {e}")
+
 
 def calculate_portfolio_summary(log_df: pd.DataFrame, current_price: float) -> str:
-    if log_df is None or log_df.empty:
-        return "### 📊 Portfolio Summary\n- No trading history found yet. Ready to start!"
+    # (This function is perfect and remains unchanged)
+    if log_df is None or log_df.empty: return "### 📊 Portfolio Summary\n- No trading history found yet."
     try:
         total_invested_usd=log_df['buy_usd'].sum(); total_holdings_btc=log_df['buy_btc'].sum()
-        if total_invested_usd <= 0 or total_holdings_btc <= 0: return "### 📊 Portfolio Summary\n- No valid investment recorded yet."
+        if total_invested_usd <= 0 or total_holdings_btc <= 0: return "### 📊 Portfolio Summary\n- No valid investment recorded."
         current_value_usd=total_holdings_btc*current_price; average_buy_price=total_invested_usd/total_holdings_btc
         profit_loss_usd=current_value_usd-total_invested_usd; roi_percentage=(profit_loss_usd/total_invested_usd)*100
         pl_sign="+" if profit_loss_usd >= 0 else ""; pl_emoji="🟢" if profit_loss_usd >= 0 else "🔴"
@@ -85,8 +135,9 @@ def calculate_portfolio_summary(log_df: pd.DataFrame, current_price: float) -> s
     except Exception as e: return f"### 📊 Portfolio Summary\n- Error calculating summary: {e}"
 
 # ==============================================================================
-# SECTION 3: CORE LOGIC (Unchanged)
+# SECTION 3: CORE LOGIC (Unchanged, it is robust)
 # ==============================================================================
+# (This entire section is correct and remains unchanged)
 def index_growth_estimate(age_days: int) -> float:
     age_days=max(1, age_days); return 10**(5.84*math.log10(age_days)-17.01)
 def calculate_continuous_multiplier(x: float) -> float:
@@ -136,33 +187,21 @@ def main():
             print(f"Placing market buy order to SPEND ${investment_amount}...")
             order = exchange.create_market_buy_order_with_cost(OKX_SYMBOL, investment_amount)
             
-            # --- [CRITICAL FIX v5.2] Robustly parse order results with fallbacks ---
-            # Priority: 1. From order object, 2. From our own data, 3. Safe default (0)
             final_cost = order.get('cost', 0) or investment_amount
             final_filled = order.get('filled', 0)
             final_average = order.get('average', 0) or price_now
+            if not final_filled and final_cost > 0 and final_average > 0: final_filled = final_cost / final_average
+            new_log_entry = {'date': dt.date.today().isoformat(), 'buy_usd': final_cost, 'buy_btc': final_filled, 'price_usd': final_average}
             
-            # If filled is still missing, calculate it as a last resort
-            if not final_filled and final_cost > 0 and final_average > 0:
-                final_filled = final_cost / final_average
-
-            new_log_entry = {'date': dt.date.today().isoformat(),
-                             'buy_usd': final_cost,
-                             'buy_btc': final_filled,
-                             'price_usd': final_average}
-            
-            # Read, append, and save
             try:
                 log_df = pd.read_csv(LOG_FILE) if os.path.exists(LOG_FILE) and os.path.getsize(LOG_FILE) > 0 else pd.DataFrame()
                 log_df = pd.concat([log_df, pd.DataFrame([new_log_entry])], ignore_index=True)
                 log_df.to_csv(LOG_FILE, index=False)
                 print(f"✅ Appended transaction to {LOG_FILE}: {new_log_entry}")
-            except Exception as e:
-                print(f"Error while updating CSV log: {e}")
+            except Exception as e: print(f"Error while updating CSV log: {e}")
             
             final_issue_title = f"✅ Trade Successful: Spent ${new_log_entry['buy_usd']:.2f} on {OKX_SYMBOL}"
             execution_log = f"### 📈 Trade Execution\n- **Status:** `SUCCESS`\n- **Order ID:** `{order.get('id', 'N/A')}`"
-
         else:
             final_issue_title = f"🟡 Trade Skipped: Amount was `{investment_amount}`"
             execution_log = f"### 📈 Trade Execution\n- **Status:** `SKIPPED`"
@@ -180,7 +219,7 @@ def main():
             
         if price_now and math.isfinite(price_now):
             portfolio_summary_log = calculate_portfolio_summary(final_log_df, price_now)
-            generate_roi_chart(final_log_df)
+            generate_dashboard_charts(final_log_df) # Call the new main charting function
         else:
             portfolio_summary_log = "### 📊 Portfolio Summary\n- Could not fetch current price to generate summary."
 
