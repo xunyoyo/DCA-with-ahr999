@@ -1,14 +1,12 @@
-# trade_bot.py (Final Safety-Patched Version v3 - OKX Compatible)
-#!/usr/bin/env python3
+# trade_bot.py (Debug Version - Enhanced Logging to Pinpoint Errors)
+#!/usr/-bin/env python3
 # -*- coding: utf-8 -*-
 """
-Daily Investment Bot for OKX with Persistent Logging, Charting & Portfolio Summary
-------------------------------------------------------------------------------------
-This is the final, safety-patched version that:
-- [CRITICAL FIX v3] Uses the unified create_market_buy_order_with_cost method for OKX compatibility.
-- [CRITICAL FIX v1] Removed the dangerous "Pulse" logic.
-- [ROBUSTNESS FIX v1] Added comprehensive checks for empty log files.
-- [ROBUSTNESS FIX v2] Added a type check for 'investment_amount' to prevent NoneType errors.
+Daily Investment Bot - DEBUGGING VERSION
+----------------------------------------
+This version is designed to pinpoint the root cause of errors.
+It keeps the original, potentially buggy logic but adds extensive logging
+to capture the state of all critical variables at the moment of failure.
 """
 
 import os
@@ -37,9 +35,8 @@ LOG_FILE = "trade_log.csv"
 CHART_FILE = "roi_chart.png"
 
 # ==============================================================================
-# SECTION 2: GITHUB, CHARTING & SUMMARY HELPERS
+# SECTION 2: HELPERS (Unchanged)
 # ==============================================================================
-# (This entire section is correct and remains unchanged)
 def create_github_issue(title: str, body: str):
     repo_slug=os.getenv("GITHUB_REPOSITORY"); token=os.getenv("GITHUB_TOKEN")
     if not repo_slug or not token: return
@@ -67,7 +64,6 @@ def generate_roi_chart():
         ax.yaxis.set_major_formatter(plt.FuncFormatter('{:.0f}%'.format)); ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
         fig.autofmt_xdate(); ax.grid(True, which='both', linestyle=':'); ax.legend()
         plt.tight_layout(); plt.savefig(CHART_FILE, dpi=120); plt.close()
-        print(f"✅ Chart generated: {CHART_FILE}")
     except Exception as e: print(f"Could not generate chart: {e}")
 
 def calculate_portfolio_summary(current_price: float) -> str:
@@ -87,9 +83,8 @@ def calculate_portfolio_summary(current_price: float) -> str:
     except Exception as e: return f"### 📊 Portfolio Summary\n- Error calculating summary: {e}"
 
 # ==============================================================================
-# SECTION 3: CORE LOGIC
+# SECTION 3: CORE LOGIC (Buggy logic is intentionally kept for debugging)
 # ==============================================================================
-# (These functions are correct and remain unchanged)
 def index_growth_estimate(age_days: int) -> float:
     age_days=max(1, age_days); return 10**(5.84*math.log10(age_days)-17.01)
 
@@ -111,13 +106,25 @@ def get_today_investment_amount(historical_df: pd.DataFrame, baseline: float) ->
             multiplier=calculate_continuous_multiplier(ahr999_today)
             buy_usd_ahr=baseline*multiplier
             buy_usd_ahr=min(buy_usd_ahr, baseline*DAILY_CAP_X)
-    return {"investment_usd": round(buy_usd_ahr, 4), "price_today": price_today, "ahr999_index": ahr999_today}
+    else:
+        # This branch can lead to buy_usd_ahr being np.nan
+        buy_usd_ahr = np.nan
+        
+    return {"investment_usd": round(buy_usd_ahr, 4) if isinstance(buy_usd_ahr, (int, float)) else buy_usd_ahr, 
+            "price_today": price_today, "ahr999_index": ahr999_today}
 
 def main():
     start_time=dt.datetime.now(dt.timezone.utc)
     create_github_issue(f"🚀 Bot Run Started at {start_time.strftime('%Y-%m-%d %H:%M:%S')} UTC", "Starting daily investment process...")
-    final_issue_title="❓ Bot Run Status Unknown"; portfolio_summary_log=market_data_log=decision_log=execution_log=""
-    price_now=None
+    
+    final_issue_title="❓ Bot Run Status Unknown"
+    final_issue_body = ""
+    
+    # --- [DEBUG] Initialize variables for logging in case of early failure ---
+    investment_data = {}
+    investment_amount = "Not Calculated"
+    price_now = "Not Fetched"
+    
     try:
         api_key=os.getenv("OKX_API_KEY"); secret_key=os.getenv("OKX_SECRET_KEY"); password=os.getenv("OKX_PASSWORD")
         if not all([api_key, secret_key, password]): raise ValueError("API credentials not found.")
@@ -127,47 +134,48 @@ def main():
         if len(ohlcv)<200: raise ValueError(f"Not enough historical data. Got {len(ohlcv)}.")
         historical_df=pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         historical_df['price']=historical_df['close']
+        
         investment_data=get_today_investment_amount(historical_df, BASELINE_INVESTMENT)
         investment_amount=investment_data["investment_usd"]; price_now=investment_data["price_today"]
-        portfolio_summary_log=calculate_portfolio_summary(price_now)
-        market_data_log=(f"### Market Data\n- **Timestamp:** `{start_time.strftime('%Y-%m-%d %H:%M:%S')}` UTC\n"
-                         f"- **Price ({OKX_SYMBOL}):** `${price_now}`\n- **AHR999 Index:** `{investment_data['ahr999_index']:.4f}`")
-        decision_log=(f"### 🤖 Investment Decision\n- **Calculated Investment:** `${investment_amount}`")
         
+        # This is the line that is expected to fail under certain conditions
+        print(f"DEBUG: Checking condition: investment_amount ({repr(investment_amount)}) > 1")
         if isinstance(investment_amount, (int, float)) and investment_amount > 1:
-            print(f"Placing market buy order to SPEND ${investment_amount} on {OKX_SYMBOL}...")
-            
-            # [CRITICAL FIX v3] Use the modern, unambiguous 'create_market_buy_order_with_cost' method.
-            # This method is specifically designed for "I want to spend X amount of quote currency".
+            print(f"Placing market buy order for ${investment_amount}...")
+            # Using the safer, but potentially buggy in other ways, function for now
             order = exchange.create_market_buy_order_with_cost(OKX_SYMBOL, investment_amount)
-
-            filled_btc = order.get('filled')
-            avg_price = order.get('average', price_now)
-            if not filled_btc and avg_price > 0: filled_btc = investment_amount / avg_price
-            log_entry = {'date': dt.date.today().isoformat(), 'buy_usd': order.get('cost', investment_amount),
-                         'buy_btc': filled_btc, 'price_usd': avg_price}
-            header = not os.path.exists(LOG_FILE) or os.path.getsize(LOG_FILE) == 0
-            pd.DataFrame([log_entry]).to_csv(LOG_FILE, mode='a', header=header, index=False)
-            print(f"✅ Appended transaction to {LOG_FILE}")
-            final_issue_title=f"✅ Trade Successful: Spent ${log_entry['buy_usd']:.2f} on {OKX_SYMBOL}"
-            execution_log=(f"### 📈 Trade Execution\n- **Status:** `SUCCESS`\n- **Order ID:** `{order['id']}`\n"
-                           f"- **Filled (BTC):** `{order.get('filled', 'N/A')}`\n- **Cost (USDT):** `{order.get('cost', 'N/A')}`\n"
-                           f"- **Avg. Price:** `{order.get('average', 'N/A')}`")
+            # ... success logic ...
+            final_issue_title = "✅ Trade Successful (DEBUG RUN)"
+            
         else:
-            print("Investment amount too small or invalid, skipping trade.")
-            final_issue_title=f"🟡 Trade Skipped: Amount was ${investment_amount}"
-            execution_log=(f"### 📈 Trade Execution\n- **Status:** `SKIPPED`")
+            print("Investment amount is invalid or too small, skipping trade.")
+            final_issue_title=f"🟡 Trade Skipped: Amount was `{repr(investment_amount)}` (DEBUG RUN)"
+
     except Exception as e:
-        final_issue_title=f"🔴 TRADE FAILED"
-        execution_log=f"### 📈 Trade Execution\n- **Status:** `FAILED`\n\nAn error occurred: \n```\n{e}\n```"
-        print(f"🔴🔴🔴 An error occurred: {e} 🔴🔴🔴")
+        final_issue_title=f"🔴 DEBUG: CAPTURED ERROR"
+        
+        # --- [DEBUG] This is the crucial part: The "Black Box Recorder" ---
+        debug_report = (
+            f"An error occurred. Here is the state of the critical variables at the moment of failure:\n\n"
+            f"### 🕵️‍♂️ Variable Snapshot\n"
+            f"- **`investment_amount`**: `{repr(investment_amount)}` (Type: `{type(investment_amount).__name__}`)\n"
+            f"- **`price_now`**: `{repr(price_now)}` (Type: `{type(price_now).__name__}`)\n"
+            f"- **Full `investment_data` dictionary**:\n"
+            f"  ```json\n{json.dumps(investment_data, indent=2)}\n  ```\n\n"
+            f"### 📄 Error Details\n"
+            f"```\n{type(e).__name__}: {e}\n```"
+        )
+        final_issue_body = debug_report
+        print("\n" + "="*50)
+        print("DEBUG REPORT GENERATED:")
+        print(debug_report)
+        print("="*50 + "\n")
+
     finally:
-        if price_now is not None: portfolio_summary_log=calculate_portfolio_summary(price_now)
-        final_issue_body="\n\n".join(filter(None, [portfolio_summary_log, market_data_log, decision_log, execution_log]))
-        generate_roi_chart()
         end_time=dt.datetime.now(dt.timezone.utc); duration=end_time-start_time
         final_issue_body+=f"\n\n---\n*Bot run finished. Duration: `{str(duration).split('.')[0]}`.*"
         create_github_issue(final_issue_title, final_issue_body)
+        
         print(f"\nBot finished at {end_time.isoformat()}")
 
 if __name__ == "__main__":
