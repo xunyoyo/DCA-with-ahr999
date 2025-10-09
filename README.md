@@ -15,6 +15,33 @@ Automates a daily Bitcoin dollar-cost averaging strategy on OKX, enhanced with t
 - matplotlib：生成多张高分辨率数据可视化图表
 - requests：与 GitHub API 通信
 
+## ⚙️ GitHub Action 自动化
+仓库自带 `Daily Investment Bot Runner` 工作流（位于 `.github/workflows/main.yml`），可在 GitHub 上按计划或手动运行：
+
+### 运行方式
+- **定时触发**：默认在每天 `02:00 UTC`（北京时间上午 10 点）执行，自动下载行情、下单、生成图表并推送 Issue。想调整时间，可修改 `cron: '0 2 * * *'`。
+- **手动触发**：进入 GitHub 仓库的 **Actions ➜ Daily Investment Bot Runner**，点击 `Run workflow` 立即执行。
+
+### 必要密钥配置
+1. 打开仓库 `Settings ➜ Secrets and variables ➜ Actions`。
+2. 新建下列 Repository secrets，用于授权交易与 Issue 写入：
+   - `OKX_API_KEY`
+   - `OKX_SECRET_KEY`
+   - `OKX_PASSWORD`
+   - `GITHUB_TOKEN`（需具备 `repo` 范围或使用默认 `GITHUB_TOKEN` 权限即可）
+
+### 工作流步骤概览
+```mermaid
+
+    A[Checkout 仓库] --> B[安装 Python 3.10]
+    B --> C[pip install -r requirements.txt]
+    C --> D[运行 trade_bot.py]
+    D --> E{有新日志/图表?}
+    E -- 是 --> F[提交并推送变更]
+    E -- 否 --> G[不提交]
+```
+
+> **提示**：工作流运行时会使用最新提交的代码，确保策略更新后的首个版本已推送到 `main` 分支。
 ## 🚀 安装与启动
 ```powershell
 # 1. 克隆仓库
