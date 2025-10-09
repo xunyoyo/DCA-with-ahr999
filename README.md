@@ -32,13 +32,13 @@ Automates a daily Bitcoin dollar-cost averaging strategy on OKX, enhanced with t
 
 ### 工作流步骤概览
 ```mermaid
-
-    A[Checkout 仓库] --> B[安装 Python 3.10]
-    B --> C[pip install -r requirements.txt]
-    C --> D[运行 trade_bot.py]
-    D --> E{有新日志/图表?}
-    E -- 是 --> F[提交并推送变更]
-    E -- 否 --> G[不提交]
+graph TD
+   A[Checkout 仓库] --> B[安装 Python 3.10]
+   B --> C[pip install -r requirements.txt]
+   C --> D[运行 trade_bot.py]
+   D --> E{有新日志/图表?}
+   E -- 是 --> F[提交并推送变更]
+   E -- 否 --> G[不提交]
 ```
 
 > **提示**：工作流运行时会使用最新提交的代码，确保策略更新后的首个版本已推送到 `main` 分支。
