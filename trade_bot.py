@@ -14,6 +14,7 @@ import os
 import json
 import math
 import datetime as dt
+import contextlib
 import requests
 import pandas as pd
 import numpy as np
@@ -33,6 +34,99 @@ DAILY_CAP_X = 4.0
 PAUSE_THRESHOLD = 2.0
 NEUTRAL_X = 1.0
 LOG_FILE = "trade_log.csv"
+DEFAULT_CHART_THEME = "light"
+
+# ==============================================================================
+# MODERN CHART THEMES (New section)
+# ==============================================================================
+CHART_THEMES = {
+    "light": {
+        "label": "Snowy Minimal",
+        "style": "seaborn-v0_8-whitegrid",
+        "palette": {
+            "roi": "#2563EB",
+            "value": "#16A34A",
+            "cost": "#F97316",
+            "positive_fill": "#22C55E",
+            "negative_fill": "#F87171"
+        },
+        "rc": {
+            "font.family": "DejaVu Sans",
+            "axes.titlesize": 18,
+            "axes.labelsize": 13,
+            "axes.titlecolor": "#0F172A",
+            "axes.labelcolor": "#1E293B",
+            "axes.edgecolor": "#CBD5F5",
+            "xtick.color": "#334155",
+            "ytick.color": "#334155",
+            "grid.color": "#E2E8F0",
+            "legend.frameon": True
+        },
+        "figure_facecolor": "#F8FAFC",
+        "axes_facecolor": "#FFFFFF",
+        "legend_facecolor": "#FFFFFF"
+    },
+    "midnight": {
+        "label": "Midnight Dashboard",
+        "style": "seaborn-v0_8-darkgrid",
+        "palette": {
+            "roi": "#60A5FA",
+            "value": "#34D399",
+            "cost": "#FBBF24",
+            "positive_fill": "#059669",
+            "negative_fill": "#F87171"
+        },
+        "rc": {
+            "font.family": "DejaVu Sans",
+            "axes.titlesize": 18,
+            "axes.labelsize": 13,
+            "axes.titlecolor": "#E2E8F0",
+            "axes.labelcolor": "#CBD5F5",
+            "axes.edgecolor": "#1F2937",
+            "xtick.color": "#94A3B8",
+            "ytick.color": "#94A3B8",
+            "grid.color": "#1F2937",
+            "legend.frameon": True
+        },
+        "figure_facecolor": "#0F172A",
+        "axes_facecolor": "#111827",
+        "legend_facecolor": "#1F2937"
+    },
+    "neon": {
+        "label": "Neon Tech",
+        "style": "fast",
+        "palette": {
+            "roi": "#38BDF8",
+            "value": "#22D3EE",
+            "cost": "#F0ABFC",
+            "positive_fill": "#34D399",
+            "negative_fill": "#FB7185"
+        },
+        "rc": {
+            "font.family": "DejaVu Sans",
+            "axes.titlesize": 18,
+            "axes.labelsize": 13,
+            "axes.titlecolor": "#F8FAFC",
+            "axes.labelcolor": "#E0F2FE",
+            "axes.edgecolor": "#312E81",
+            "xtick.color": "#C7D2FE",
+            "ytick.color": "#C7D2FE",
+            "grid.color": "#1E1B4B",
+            "legend.frameon": True
+        },
+        "figure_facecolor": "#0B1120",
+        "axes_facecolor": "#111827",
+        "legend_facecolor": "#1E1B4B"
+    }
+}
+
+
+def _resolve_chart_theme(theme_key: str | None) -> tuple[str, dict]:
+    key = (theme_key or DEFAULT_CHART_THEME).lower().strip()
+    if key not in CHART_THEMES:
+        print(f"⚠️ Unknown chart theme '{theme_key}', falling back to '{DEFAULT_CHART_THEME}'.")
+        key = DEFAULT_CHART_THEME
+    return key, CHART_THEMES[key]
 
 # ==============================================================================
 # SECTION 2: HELPERS (Now includes multiple chart functions)
@@ -50,33 +144,44 @@ def create_github_issue(title: str, body: str):
     except Exception as e: print(f"Error creating GitHub issue: {e}")
 
 # --- NEW: Charting Sub-functions ---
-def _plot_roi_curve(ax, df):
-    ax.plot(df['date'], df['roi'] * 100, label="Portfolio ROI", color='dodgerblue')
+def _plot_roi_curve(ax, df, palette):
+    ax.plot(df['date'], df['roi'] * 100, label="Portfolio ROI", color=palette['roi'], linewidth=2.4)
     ax.axhline(0, color='grey', linewidth=0.8, linestyle='--')
     ax.set_title("1. Return on Investment (ROI)", fontsize=16)
     ax.set_ylabel("ROI (%)")
     ax.yaxis.set_major_formatter(plt.FuncFormatter('{:.0f}%'.format))
 
-def _plot_equity_curve(ax, df):
-    ax.plot(df['date'], df['value_usd'], label="Portfolio Value", color='green')
+def _plot_equity_curve(ax, df, palette):
+    ax.plot(df['date'], df['value_usd'], label="Portfolio Value", color=palette['value'], linewidth=2.4)
     ax.set_title("2. Portfolio Equity Curve", fontsize=16)
     ax.set_ylabel("Portfolio Value (USD)")
     ax.yaxis.set_major_formatter(plt.FuncFormatter('${:,.0f}'.format))
 
-def _plot_value_vs_cost(ax, df):
-    ax.plot(df['date'], df['value_usd'], label="Portfolio Value", color='green')
-    ax.plot(df['date'], df['invest_cum'], label="Cumulative Cost", color='red', linestyle='--')
+def _plot_value_vs_cost(ax, df, palette):
+    ax.plot(df['date'], df['value_usd'], label="Portfolio Value", color=palette['value'], linewidth=2.4)
+    ax.plot(df['date'], df['invest_cum'], label="Cumulative Cost", color=palette['cost'], linestyle='--', linewidth=2)
     ax.fill_between(df['date'], df['invest_cum'], df['value_usd'], 
                     where=df['value_usd'] >= df['invest_cum'], 
-                    facecolor='green', alpha=0.3, interpolate=True)
+                    facecolor=palette['positive_fill'], alpha=0.25, interpolate=True)
     ax.fill_between(df['date'], df['invest_cum'], df['value_usd'], 
                     where=df['value_usd'] < df['invest_cum'], 
-                    facecolor='red', alpha=0.3, interpolate=True)
+                    facecolor=palette['negative_fill'], alpha=0.25, interpolate=True)
     ax.set_title("3. Portfolio Value vs. Cumulative Cost", fontsize=16)
     ax.set_ylabel("Amount (USD)")
     ax.yaxis.set_major_formatter(plt.FuncFormatter('${:,.0f}'.format))
 
-def generate_dashboard_charts(log_df: pd.DataFrame):
+def _style_axes(ax, theme_config: dict):
+    axes_face = theme_config.get("axes_facecolor")
+    if axes_face:
+        ax.set_facecolor(axes_face)
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_linewidth(1.0)
+        spine.set_color(theme_config.get("rc", {}).get("axes.edgecolor", "#CBD5F5"))
+    ax.grid(True, which='both', linestyle=':', linewidth=0.7, alpha=0.6)
+
+
+def generate_dashboard_charts(log_df: pd.DataFrame, theme_key: str | None = None):
     if log_df is None or len(log_df) < 2:
         print("Not enough data to generate charts.")
         return
@@ -89,31 +194,57 @@ def generate_dashboard_charts(log_df: pd.DataFrame):
         df['value_usd'] = df['hold_btc_cum'] * df['price_usd']
         df['roi'] = (df['value_usd'] / df['invest_cum'] - 1).fillna(0)
 
-        plt.style.use('seaborn-v0_8-darkgrid')
+        theme_key, theme_config = _resolve_chart_theme(theme_key)
+        palette = theme_config['palette']
+        figure_face = theme_config.get("figure_facecolor", "white")
+        legend_face = theme_config.get("legend_facecolor", figure_face)
+        rc_override = theme_config.get("rc", {})
+
+        style_context = plt.style.context(theme_config.get("style", "seaborn-v0_8-darkgrid"))
+        with plt.rc_context(rc_override):
+            with style_context:
+                # --- Plot 1: ROI Curve (Saves to roi_chart.png) ---
+                fig1, ax1 = plt.subplots(figsize=(12, 7), dpi=150)
+                fig1.patch.set_facecolor(figure_face)
+                _style_axes(ax1, theme_config)
+                _plot_roi_curve(ax1, df, palette)
+                ax1.legend(facecolor=legend_face, framealpha=0.9, edgecolor='none')
+                ax1.axhline(0, color=palette['cost'], linewidth=1, linestyle='--', alpha=0.35)
+                ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+                fig1.autofmt_xdate()
+                plt.tight_layout()
+                output_roi = "roi_chart.png"
+                plt.savefig(output_roi, dpi=300, bbox_inches='tight', facecolor=fig1.get_facecolor())
+                plt.close(fig1)
+                print(f"✅ Chart generated ({theme_key}): {output_roi}")
         
-        # --- Plot 1: ROI Curve (Saves to roi_chart.png) ---
-        fig1, ax1 = plt.subplots(figsize=(12, 7))
-        _plot_roi_curve(ax1, df)
-        ax1.legend(); ax1.grid(True, which='both', linestyle=':')
-        fig1.autofmt_xdate(); plt.tight_layout()
-        plt.savefig("roi_chart.png", dpi=120); plt.close(fig1)
-        print(f"✅ Chart generated: roi_chart.png")
+                # --- Plot 2: Equity Curve (Saves to equity_curve.png) ---
+                fig2, ax2 = plt.subplots(figsize=(12, 7), dpi=150)
+                fig2.patch.set_facecolor(figure_face)
+                _style_axes(ax2, theme_config)
+                _plot_equity_curve(ax2, df, palette)
+                ax2.legend(facecolor=legend_face, framealpha=0.9, edgecolor='none')
+                ax2.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+                fig2.autofmt_xdate()
+                plt.tight_layout()
+                output_equity = "equity_curve.png"
+                plt.savefig(output_equity, dpi=300, bbox_inches='tight', facecolor=fig2.get_facecolor())
+                plt.close(fig2)
+                print(f"✅ Chart generated ({theme_key}): {output_equity}")
 
-        # --- Plot 2: Equity Curve (Saves to equity_curve.png) ---
-        fig2, ax2 = plt.subplots(figsize=(12, 7))
-        _plot_equity_curve(ax2, df)
-        ax2.legend(); ax2.grid(True, which='both', linestyle=':')
-        fig2.autofmt_xdate(); plt.tight_layout()
-        plt.savefig("equity_curve.png", dpi=120); plt.close(fig2)
-        print(f"✅ Chart generated: equity_curve.png")
-
-        # --- Plot 3: Value vs Cost (Saves to value_vs_cost.png) ---
-        fig3, ax3 = plt.subplots(figsize=(12, 7))
-        _plot_value_vs_cost(ax3, df)
-        ax3.legend(); ax3.grid(True, which='both', linestyle=':')
-        fig3.autofmt_xdate(); plt.tight_layout()
-        plt.savefig("value_vs_cost.png", dpi=120); plt.close(fig3)
-        print(f"✅ Chart generated: value_vs_cost.png")
+                # --- Plot 3: Value vs Cost (Saves to value_vs_cost.png) ---
+                fig3, ax3 = plt.subplots(figsize=(12, 7), dpi=150)
+                fig3.patch.set_facecolor(figure_face)
+                _style_axes(ax3, theme_config)
+                _plot_value_vs_cost(ax3, df, palette)
+                ax3.legend(facecolor=legend_face, framealpha=0.9, edgecolor='none')
+                ax3.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+                fig3.autofmt_xdate()
+                plt.tight_layout()
+                output_value_cost = "value_vs_cost.png"
+                plt.savefig(output_value_cost, dpi=300, bbox_inches='tight', facecolor=fig3.get_facecolor())
+                plt.close(fig3)
+                print(f"✅ Chart generated ({theme_key}): {output_value_cost}")
 
     except Exception as e:
         print(f"Could not generate dashboard charts: {e}")
@@ -219,7 +350,7 @@ def main():
             
         if price_now and math.isfinite(price_now):
             portfolio_summary_log = calculate_portfolio_summary(final_log_df, price_now)
-            generate_dashboard_charts(final_log_df) # Call the new main charting function
+            generate_dashboard_charts(final_log_df, theme_key=os.getenv("DCA_CHART_THEME", DEFAULT_CHART_THEME)) # Call the new main charting function
         else:
             portfolio_summary_log = "### 📊 Portfolio Summary\n- Could not fetch current price to generate summary."
 
