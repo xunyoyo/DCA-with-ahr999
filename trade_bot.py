@@ -21,6 +21,7 @@ import numpy as np
 import ccxt
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+from scipy.interpolate import make_interp_spline
 
 # ==============================================================================
 # SECTION 1: FINAL STRATEGY PARAMETERS (Unchanged)
@@ -121,7 +122,7 @@ CHART_THEMES = {
 }
 
 
-def _resolve_chart_theme(theme_key: str | None) -> tuple[str, dict]:
+def _resolve_chart_theme(theme_key):
     key = (theme_key or DEFAULT_CHART_THEME).lower().strip()
     if key not in CHART_THEMES:
         print(f"⚠️ Unknown chart theme '{theme_key}', falling back to '{DEFAULT_CHART_THEME}'.")
@@ -144,44 +145,243 @@ def create_github_issue(title: str, body: str):
     except Exception as e: print(f"Error creating GitHub issue: {e}")
 
 # --- NEW: Charting Sub-functions ---
+def _smooth_curve(x, y, num_points=500):
+    """使用样条插值创建平滑曲线"""
+    if len(x) < 4:  # 样条插值至少需要4个点
+        return x, y
+    try:
+        # 将日期转换为数值以便插值
+        x_num = mdates.date2num(x)
+        # 创建样条插值
+        spl = make_interp_spline(x_num, y, k=min(3, len(x)-1))
+        # 生成平滑的x值
+        x_smooth_num = np.linspace(x_num.min(), x_num.max(), num_points)
+        # 计算平滑的y值
+        y_smooth = spl(x_smooth_num)
+        # 将数值转回日期
+        x_smooth = mdates.num2date(x_smooth_num)
+        return x_smooth, y_smooth
+    except:
+        return x, y
+
 def _plot_roi_curve(ax, df, palette):
-    ax.plot(df['date'], df['roi'] * 100, label="Portfolio ROI", color=palette['roi'], linewidth=2.4)
-    ax.axhline(0, color='grey', linewidth=0.8, linestyle='--')
-    ax.set_title("1. Return on Investment (ROI)", fontsize=16)
-    ax.set_ylabel("ROI (%)")
-    ax.yaxis.set_major_formatter(plt.FuncFormatter('{:.0f}%'.format))
+    # 平滑ROI曲线
+    x_smooth, y_smooth = _smooth_curve(df['date'], df['roi'] * 100)
+    
+    # 绘制平滑曲线，增加渐变效果
+    ax.plot(x_smooth, y_smooth, label="Portfolio ROI", color=palette['roi'], linewidth=2.8, alpha=0.9)
+    
+    # 添加原始数据点作为标记（每隔一定间隔显示）
+    step = max(len(df) // 15, 1)
+    ax.scatter(df['date'][::step], df['roi'][::step] * 100, color=palette['roi'], s=40, alpha=0.6, zorder=5)
+    
+    # 填充正负区域
+    ax.fill_between(x_smooth, 0, y_smooth, where=(np.array(y_smooth)>=0), 
+                     facecolor=palette['positive_fill'], alpha=0.15, interpolate=True)
+    ax.fill_between(x_smooth, 0, y_smooth, where=(np.array(y_smooth)<0), 
+                     facecolor=palette['negative_fill'], alpha=0.15, interpolate=True)
+    
+    # 零线
+    ax.axhline(0, color='grey', linewidth=1.2, linestyle='--', alpha=0.5)
+    
+    ax.set_title("1. Return on Investment (ROI)", fontsize=18, pad=15, fontweight='bold')
+    ax.set_ylabel("ROI (%)", fontsize=14)
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{y:.0f}%'))
 
 def _plot_equity_curve(ax, df, palette):
-    ax.plot(df['date'], df['value_usd'], label="Portfolio Value", color=palette['value'], linewidth=2.4)
-    ax.set_title("2. Portfolio Equity Curve", fontsize=16)
-    ax.set_ylabel("Portfolio Value (USD)")
-    ax.yaxis.set_major_formatter(plt.FuncFormatter('${:,.0f}'.format))
+    # 平滑权益曲线
+    x_smooth, y_smooth = _smooth_curve(df['date'], df['value_usd'])
+    
+    # 绘制平滑曲线
+    ax.plot(x_smooth, y_smooth, label="Portfolio Value", color=palette['value'], linewidth=2.8, alpha=0.9)
+    
+    # 添加数据点标记
+    step = max(len(df) // 15, 1)
+    ax.scatter(df['date'][::step], df['value_usd'][::step], color=palette['value'], s=40, alpha=0.6, zorder=5)
+    
+    # 添加渐变填充效果
+    ax.fill_between(x_smooth, 0, y_smooth, facecolor=palette['value'], alpha=0.1)
+    
+    # 添加阴影效果
+    ax.plot(x_smooth, y_smooth, color=palette['value'], linewidth=6, alpha=0.1, zorder=1)
+    
+    ax.set_title("2. Portfolio Equity Curve", fontsize=18, pad=15, fontweight='bold')
+    ax.set_ylabel("Portfolio Value (USD)", fontsize=14)
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'${y:,.0f}'))
 
 def _plot_value_vs_cost(ax, df, palette):
-    ax.plot(df['date'], df['value_usd'], label="Portfolio Value", color=palette['value'], linewidth=2.4)
-    ax.plot(df['date'], df['invest_cum'], label="Cumulative Cost", color=palette['cost'], linestyle='--', linewidth=2)
-    ax.fill_between(df['date'], df['invest_cum'], df['value_usd'], 
-                    where=df['value_usd'] >= df['invest_cum'], 
-                    facecolor=palette['positive_fill'], alpha=0.25, interpolate=True)
-    ax.fill_between(df['date'], df['invest_cum'], df['value_usd'], 
-                    where=df['value_usd'] < df['invest_cum'], 
-                    facecolor=palette['negative_fill'], alpha=0.25, interpolate=True)
-    ax.set_title("3. Portfolio Value vs. Cumulative Cost", fontsize=16)
-    ax.set_ylabel("Amount (USD)")
-    ax.yaxis.set_major_formatter(plt.FuncFormatter('${:,.0f}'.format))
+    # 平滑价值曲线和成本曲线
+    x_smooth, y_value_smooth = _smooth_curve(df['date'], df['value_usd'])
+    _, y_cost_smooth = _smooth_curve(df['date'], df['invest_cum'])
+    
+    # 绘制平滑曲线
+    ax.plot(x_smooth, y_value_smooth, label="Portfolio Value", color=palette['value'], linewidth=2.8, alpha=0.9)
+    ax.plot(x_smooth, y_cost_smooth, label="Cumulative Cost", color=palette['cost'], linewidth=2.8, alpha=0.9, linestyle='-')
+    
+    # 添加数据点标记
+    step = max(len(df) // 15, 1)
+    ax.scatter(df['date'][::step], df['value_usd'][::step], color=palette['value'], s=40, alpha=0.6, zorder=5)
+    ax.scatter(df['date'][::step], df['invest_cum'][::step], color=palette['cost'], s=40, alpha=0.6, zorder=5)
+    
+    # 填充盈亏区域（使用平滑数据）
+    ax.fill_between(x_smooth, y_cost_smooth, y_value_smooth, 
+                    where=(np.array(y_value_smooth) >= np.array(y_cost_smooth)), 
+                    facecolor=palette['positive_fill'], alpha=0.25, interpolate=True, label='Profit Area')
+    ax.fill_between(x_smooth, y_cost_smooth, y_value_smooth, 
+                    where=(np.array(y_value_smooth) < np.array(y_cost_smooth)), 
+                    facecolor=palette['negative_fill'], alpha=0.25, interpolate=True, label='Loss Area')
+    
+    # 添加阴影效果
+    ax.plot(x_smooth, y_value_smooth, color=palette['value'], linewidth=6, alpha=0.08, zorder=1)
+    ax.plot(x_smooth, y_cost_smooth, color=palette['cost'], linewidth=6, alpha=0.08, zorder=1)
+    
+    ax.set_title("3. Portfolio Value vs. Cumulative Cost", fontsize=18, pad=15, fontweight='bold')
+    ax.set_ylabel("Amount (USD)", fontsize=14)
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'${y:,.0f}'))
+
+def _plot_daily_investment(ax, df, palette):
+    # 计算投资倍数
+    baseline = df['buy_usd'].median()  # 使用中位数作为基准
+    df['investment_multiplier'] = df['buy_usd'] / baseline
+    
+    # 平滑投资额曲线
+    x_smooth, y_smooth = _smooth_curve(df['date'], df['buy_usd'])
+    
+    # 绘制投资额曲线
+    ax.plot(x_smooth, y_smooth, label="Daily Investment", color=palette['cost'], linewidth=2.8, alpha=0.9)
+    
+    # 添加数据点
+    step = max(len(df) // 15, 1)
+    ax.scatter(df['date'][::step], df['buy_usd'][::step], color=palette['cost'], s=40, alpha=0.6, zorder=5)
+    
+    # 添加基准线
+    ax.axhline(baseline, color='grey', linewidth=1.5, linestyle='--', alpha=0.6, label=f'Baseline (${baseline:.2f})')
+    
+    # 填充高于/低于基准的区域
+    ax.fill_between(x_smooth, baseline, y_smooth, 
+                    where=(np.array(y_smooth) >= baseline), 
+                    facecolor=palette['cost'], alpha=0.15, interpolate=True, label='Above Baseline')
+    ax.fill_between(x_smooth, baseline, y_smooth, 
+                    where=(np.array(y_smooth) < baseline), 
+                    facecolor=palette['negative_fill'], alpha=0.15, interpolate=True, label='Below Baseline')
+    
+    ax.set_title("4. Daily Investment Amount", fontsize=18, pad=15, fontweight='bold')
+    ax.set_ylabel("Investment (USD)", fontsize=14)
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'${y:.2f}'))
+
+def _plot_btc_accumulation(ax, df, palette):
+    # 平滑BTC累计曲线
+    x_smooth, y_smooth = _smooth_curve(df['date'], df['hold_btc_cum'])
+    
+    # 绘制BTC累计曲线
+    ax.plot(x_smooth, y_smooth, label="BTC Holdings", color=palette['roi'], linewidth=2.8, alpha=0.9)
+    
+    # 添加数据点
+    step = max(len(df) // 15, 1)
+    ax.scatter(df['date'][::step], df['hold_btc_cum'][::step], color=palette['roi'], s=40, alpha=0.6, zorder=5)
+    
+    # 添加渐变填充
+    ax.fill_between(x_smooth, 0, y_smooth, facecolor=palette['roi'], alpha=0.15)
+    
+    # 添加阴影效果
+    ax.plot(x_smooth, y_smooth, color=palette['roi'], linewidth=6, alpha=0.1, zorder=1)
+    
+    ax.set_title("5. BTC Accumulation Over Time", fontsize=18, pad=15, fontweight='bold')
+    ax.set_ylabel("BTC Amount", fontsize=14)
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{y:.6f}'))
+
+def _plot_avg_cost_vs_price(ax, df, palette):
+    # 计算平均成本
+    df['avg_cost'] = df['invest_cum'] / df['hold_btc_cum']
+    
+    # 平滑曲线
+    x_smooth, y_price_smooth = _smooth_curve(df['date'], df['price_usd'])
+    _, y_cost_smooth = _smooth_curve(df['date'], df['avg_cost'])
+    
+    # 绘制价格和平均成本
+    ax.plot(x_smooth, y_price_smooth, label="BTC Price", color=palette['value'], linewidth=2.8, alpha=0.9)
+    ax.plot(x_smooth, y_cost_smooth, label="Average Cost", color=palette['cost'], linewidth=2.8, alpha=0.9)
+    
+    # 添加数据点
+    step = max(len(df) // 15, 1)
+    ax.scatter(df['date'][::step], df['price_usd'][::step], color=palette['value'], s=40, alpha=0.6, zorder=5)
+    ax.scatter(df['date'][::step], df['avg_cost'][::step], color=palette['cost'], s=40, alpha=0.6, zorder=5)
+    
+    # 填充盈亏区域
+    ax.fill_between(x_smooth, y_cost_smooth, y_price_smooth,
+                    where=(np.array(y_price_smooth) >= np.array(y_cost_smooth)),
+                    facecolor=palette['positive_fill'], alpha=0.2, interpolate=True, label='In Profit')
+    ax.fill_between(x_smooth, y_cost_smooth, y_price_smooth,
+                    where=(np.array(y_price_smooth) < np.array(y_cost_smooth)),
+                    facecolor=palette['negative_fill'], alpha=0.2, interpolate=True, label='In Loss')
+    
+    ax.set_title("6. BTC Price vs. Average Cost", fontsize=18, pad=15, fontweight='bold')
+    ax.set_ylabel("Price (USD)", fontsize=14)
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'${y:,.0f}'))
+
+def _plot_strategy_comparison(ax, df, palette):
+    # 计算普通定投（固定金额）
+    baseline = df['buy_usd'].median()
+    df['regular_dca_cost'] = baseline * np.arange(1, len(df) + 1)
+    df['regular_dca_btc'] = (baseline / df['price_usd']).cumsum()
+    df['regular_dca_value'] = df['regular_dca_btc'] * df['price_usd']
+    df['regular_roi'] = (df['regular_dca_value'] / df['regular_dca_cost'] - 1).fillna(0)
+    
+    # 平滑曲线
+    x_smooth, y_smart_smooth = _smooth_curve(df['date'], df['roi'] * 100)
+    _, y_regular_smooth = _smooth_curve(df['date'], df['regular_roi'] * 100)
+    
+    # 绘制两种策略的ROI
+    ax.plot(x_smooth, y_smart_smooth, label="Smart DCA (AHR999)", color=palette['roi'], linewidth=2.8, alpha=0.9)
+    ax.plot(x_smooth, y_regular_smooth, label="Regular DCA (Fixed)", color=palette['cost'], linewidth=2.8, alpha=0.9, linestyle='--')
+    
+    # 添加数据点
+    step = max(len(df) // 15, 1)
+    ax.scatter(df['date'][::step], df['roi'][::step] * 100, color=palette['roi'], s=40, alpha=0.6, zorder=5)
+    ax.scatter(df['date'][::step], df['regular_roi'][::step] * 100, color=palette['cost'], s=40, alpha=0.6, zorder=5)
+    
+    # 填充优势区域
+    ax.fill_between(x_smooth, y_regular_smooth, y_smart_smooth,
+                    where=(np.array(y_smart_smooth) >= np.array(y_regular_smooth)),
+                    facecolor=palette['positive_fill'], alpha=0.15, interpolate=True, label='Smart DCA Advantage')
+    ax.fill_between(x_smooth, y_regular_smooth, y_smart_smooth,
+                    where=(np.array(y_smart_smooth) < np.array(y_regular_smooth)),
+                    facecolor=palette['negative_fill'], alpha=0.15, interpolate=True, label='Regular DCA Advantage')
+    
+    # 零线
+    ax.axhline(0, color='grey', linewidth=1.2, linestyle='--', alpha=0.5)
+    
+    ax.set_title("7. Strategy Comparison: Smart vs Regular DCA", fontsize=18, pad=15, fontweight='bold')
+    ax.set_ylabel("ROI (%)", fontsize=14)
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{y:.0f}%'))
 
 def _style_axes(ax, theme_config: dict):
     axes_face = theme_config.get("axes_facecolor")
     if axes_face:
         ax.set_facecolor(axes_face)
+    
+    # 美化边框
     for spine in ax.spines.values():
         spine.set_visible(True)
-        spine.set_linewidth(1.0)
+        spine.set_linewidth(1.2)
         spine.set_color(theme_config.get("rc", {}).get("axes.edgecolor", "#CBD5F5"))
-    ax.grid(True, which='both', linestyle=':', linewidth=0.7, alpha=0.6)
+    
+    # 增强网格效果
+    ax.grid(True, which='major', linestyle='-', linewidth=0.8, alpha=0.3)
+    ax.grid(True, which='minor', linestyle=':', linewidth=0.5, alpha=0.2)
+    ax.minorticks_on()
+    
+    # 设置刻度样式
+    ax.tick_params(axis='both', which='major', labelsize=11, length=6, width=1.2)
+    ax.tick_params(axis='both', which='minor', length=3, width=0.8)
+    
+    # 添加水印
+    ax.text(0.5, 0.5, 'Github @xunyoyo', 
+            transform=ax.transAxes, fontsize=20, color='gray',
+            alpha=0.15, ha='center', va='center', rotation=30, zorder=0)
 
 
-def generate_dashboard_charts(log_df: pd.DataFrame, theme_key: str | None = None):
+def generate_dashboard_charts(log_df: pd.DataFrame, theme_key=None):
     if log_df is None or len(log_df) < 2:
         print("Not enough data to generate charts.")
         return
@@ -203,48 +403,136 @@ def generate_dashboard_charts(log_df: pd.DataFrame, theme_key: str | None = None
         style_context = plt.style.context(theme_config.get("style", "seaborn-v0_8-darkgrid"))
         with plt.rc_context(rc_override):
             with style_context:
-                # --- Plot 1: ROI Curve (Saves to roi_chart.png) ---
-                fig1, ax1 = plt.subplots(figsize=(12, 7), dpi=150)
-                fig1.patch.set_facecolor(figure_face)
+                # 创建综合仪表盘 - 4行2列布局，顶部留出空间给统计信息
+                fig = plt.figure(figsize=(24, 30), dpi=150)
+                fig.patch.set_facecolor(figure_face)
+                
+                # 添加总标题
+                fig.suptitle('DCA Investment Dashboard - AHR999 Strategy', fontsize=28, fontweight='bold', y=0.988)
+                
+                # 计算关键统计数据
+                total_invested = df['invest_cum'].iloc[-1]
+                total_btc = df['hold_btc_cum'].iloc[-1]
+                current_value = df['value_usd'].iloc[-1]
+                avg_cost = total_invested / total_btc
+                current_price = df['price_usd'].iloc[-1]
+                total_profit = current_value - total_invested
+                roi_pct = (total_profit / total_invested) * 100
+                
+                # 计算普通定投对比
+                baseline = df['buy_usd'].median()
+                regular_invested = baseline * len(df)
+                regular_btc = (baseline / df['price_usd']).sum()
+                regular_value = regular_btc * current_price
+                regular_profit = regular_value - regular_invested
+                regular_roi = (regular_profit / regular_invested) * 100
+                
+                # 策略优势
+                strategy_advantage = roi_pct - regular_roi
+                profit_advantage = total_profit - regular_profit
+                
+                # 添加统计信息面板 - 居中显示，带双横线
+                stats_y = 0.965
+                
+                # 上横线
+                fig.text(0.5, stats_y + 0.002, '─' * 220, ha='center', fontsize=8, color='gray', alpha=0.5)
+                
+                # 第一行统计数据 - 居中对齐布局
+                col1_x = 0.12
+                fig.text(col1_x, stats_y - 0.012, 'Investment:', fontsize=13, fontweight='bold', color=palette['roi'], ha='center')
+                fig.text(col1_x, stats_y - 0.025, f'${total_invested:,.2f}', fontsize=11, ha='center')
+                fig.text(col1_x, stats_y - 0.036, f'{len(df)} days', fontsize=10, alpha=0.8, ha='center')
+                
+                col2_x = 0.28
+                fig.text(col2_x, stats_y - 0.012, 'Holdings:', fontsize=13, fontweight='bold', color=palette['roi'], ha='center')
+                fig.text(col2_x, stats_y - 0.025, f'{total_btc:.6f} BTC', fontsize=11, ha='center')
+                fig.text(col2_x, stats_y - 0.036, f'${current_value:,.2f}', fontsize=10, alpha=0.8, ha='center')
+                
+                col3_x = 0.46
+                profit_color = palette['value'] if total_profit >= 0 else palette['negative_fill']
+                fig.text(col3_x, stats_y - 0.012, 'Performance:', fontsize=13, fontweight='bold', color=profit_color, ha='center')
+                fig.text(col3_x, stats_y - 0.025, f'{roi_pct:+.2f}% ROI', fontsize=11, fontweight='bold', color=profit_color, ha='center')
+                fig.text(col3_x, stats_y - 0.036, f'${total_profit:+,.2f}', fontsize=10, color=profit_color, ha='center')
+                
+                col4_x = 0.62
+                fig.text(col4_x, stats_y - 0.012, 'Price:', fontsize=13, fontweight='bold', color=palette['cost'], ha='center')
+                fig.text(col4_x, stats_y - 0.025, f'${current_price:,.0f}', fontsize=11, ha='center')
+                fig.text(col4_x, stats_y - 0.036, f'Avg: ${avg_cost:,.0f}', fontsize=10, alpha=0.8, ha='center')
+                
+                col5_x = 0.80
+                adv_color = palette['value'] if strategy_advantage >= 0 else palette['negative_fill']
+                fig.text(col5_x, stats_y - 0.012, 'vs Regular DCA:', fontsize=13, fontweight='bold', color=palette['roi'], ha='center')
+                fig.text(col5_x, stats_y - 0.025, f'{roi_pct:.2f}% vs {regular_roi:.2f}%', fontsize=11, ha='center')
+                fig.text(col5_x, stats_y - 0.036, f'{strategy_advantage:+.2f}% ({profit_advantage:+,.0f})', fontsize=10, 
+                        fontweight='bold', color=adv_color, ha='center')
+                
+                # 下横线
+                fig.text(0.5, stats_y - 0.045, '─' * 220, ha='center', fontsize=8, color='gray', alpha=0.5)
+                
+                # 创建子图 - 图表进一步下移
+                gs = fig.add_gridspec(4, 2, hspace=0.35, wspace=0.25, top=0.88, bottom=0.02, left=0.06, right=0.94)
+                
+                # 图1: ROI曲线
+                ax1 = fig.add_subplot(gs[0, 0])
                 _style_axes(ax1, theme_config)
                 _plot_roi_curve(ax1, df, palette)
-                ax1.legend(facecolor=legend_face, framealpha=0.9, edgecolor='none')
-                ax1.axhline(0, color=palette['cost'], linewidth=1, linestyle='--', alpha=0.35)
+                ax1.legend(facecolor=legend_face, framealpha=0.9, edgecolor='none', fontsize=10, loc='best')
                 ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-                fig1.autofmt_xdate()
-                plt.tight_layout()
-                output_roi = "roi_chart.png"
-                plt.savefig(output_roi, dpi=300, bbox_inches='tight', facecolor=fig1.get_facecolor())
-                plt.close(fig1)
-                print(f"✅ Chart generated ({theme_key}): {output_roi}")
-        
-                # --- Plot 2: Equity Curve (Saves to equity_curve.png) ---
-                fig2, ax2 = plt.subplots(figsize=(12, 7), dpi=150)
-                fig2.patch.set_facecolor(figure_face)
+                plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45, ha='right')
+                
+                # 图2: 权益曲线
+                ax2 = fig.add_subplot(gs[0, 1])
                 _style_axes(ax2, theme_config)
                 _plot_equity_curve(ax2, df, palette)
-                ax2.legend(facecolor=legend_face, framealpha=0.9, edgecolor='none')
+                ax2.legend(facecolor=legend_face, framealpha=0.9, edgecolor='none', fontsize=10, loc='best')
                 ax2.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-                fig2.autofmt_xdate()
-                plt.tight_layout()
-                output_equity = "equity_curve.png"
-                plt.savefig(output_equity, dpi=300, bbox_inches='tight', facecolor=fig2.get_facecolor())
-                plt.close(fig2)
-                print(f"✅ Chart generated ({theme_key}): {output_equity}")
-
-                # --- Plot 3: Value vs Cost (Saves to value_vs_cost.png) ---
-                fig3, ax3 = plt.subplots(figsize=(12, 7), dpi=150)
-                fig3.patch.set_facecolor(figure_face)
+                plt.setp(ax2.xaxis.get_majorticklabels(), rotation=45, ha='right')
+                
+                # 图3: 价值vs成本
+                ax3 = fig.add_subplot(gs[1, 0])
                 _style_axes(ax3, theme_config)
                 _plot_value_vs_cost(ax3, df, palette)
-                ax3.legend(facecolor=legend_face, framealpha=0.9, edgecolor='none')
+                ax3.legend(facecolor=legend_face, framealpha=0.9, edgecolor='none', fontsize=10, loc='best')
                 ax3.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-                fig3.autofmt_xdate()
-                plt.tight_layout()
-                output_value_cost = "value_vs_cost.png"
-                plt.savefig(output_value_cost, dpi=300, bbox_inches='tight', facecolor=fig3.get_facecolor())
-                plt.close(fig3)
-                print(f"✅ Chart generated ({theme_key}): {output_value_cost}")
+                plt.setp(ax3.xaxis.get_majorticklabels(), rotation=45, ha='right')
+                
+                # 图4: 每日投资额
+                ax4 = fig.add_subplot(gs[1, 1])
+                _style_axes(ax4, theme_config)
+                _plot_daily_investment(ax4, df, palette)
+                ax4.legend(facecolor=legend_face, framealpha=0.9, edgecolor='none', fontsize=10, loc='best')
+                ax4.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+                plt.setp(ax4.xaxis.get_majorticklabels(), rotation=45, ha='right')
+                
+                # 图5: BTC累积
+                ax5 = fig.add_subplot(gs[2, 0])
+                _style_axes(ax5, theme_config)
+                _plot_btc_accumulation(ax5, df, palette)
+                ax5.legend(facecolor=legend_face, framealpha=0.9, edgecolor='none', fontsize=10, loc='best')
+                ax5.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+                plt.setp(ax5.xaxis.get_majorticklabels(), rotation=45, ha='right')
+                
+                # 图6: 平均成本vs价格
+                ax6 = fig.add_subplot(gs[2, 1])
+                _style_axes(ax6, theme_config)
+                _plot_avg_cost_vs_price(ax6, df, palette)
+                ax6.legend(facecolor=legend_face, framealpha=0.9, edgecolor='none', fontsize=10, loc='best')
+                ax6.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+                plt.setp(ax6.xaxis.get_majorticklabels(), rotation=45, ha='right')
+                
+                # 图7: 策略对比（跨两列）
+                ax7 = fig.add_subplot(gs[3, :])
+                _style_axes(ax7, theme_config)
+                _plot_strategy_comparison(ax7, df, palette)
+                ax7.legend(facecolor=legend_face, framealpha=0.9, edgecolor='none', fontsize=11, loc='best', ncol=2)
+                ax7.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+                plt.setp(ax7.xaxis.get_majorticklabels(), rotation=45, ha='right')
+                
+                # 保存综合仪表盘
+                output_dashboard = "dashboard_comprehensive.png"
+                plt.savefig(output_dashboard, dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor())
+                plt.close(fig)
+                print(f"✅ Comprehensive Dashboard generated ({theme_key}): {output_dashboard}")
 
     except Exception as e:
         print(f"Could not generate dashboard charts: {e}")
