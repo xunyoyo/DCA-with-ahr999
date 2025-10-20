@@ -1,6 +1,8 @@
-# AHR999 Dollar-Cost Averaging Bot
+# AHR999 智能定投机器人
 
-Automates a daily Bitcoin dollar-cost averaging strategy on OKX, enhanced with the AHR999 indicator and a rich visual dashboard.
+![Pic](./dashboard_comprehensive.png)
+
+基于 AHR999 指标的比特币智能定投策略，在 OKX 交易所自动执行每日定投，并提供丰富的可视化数据仪表盘。
 
 ## ✨ 项目亮点
 - **智能买入**：基于 AHR999 指标动态调整每日投入金额，自动下单至 OKX 现货市场。
