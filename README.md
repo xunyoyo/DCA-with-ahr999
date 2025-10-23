@@ -157,6 +157,18 @@ GitHub Action 是 GitHub 提供的免费自动化服务，可以让你在云端�
      - `OKX_PASSWORD`
    - ✅ 绿色对勾表示配置成功
 
+8. **（可选）配置每日投资金额**
+   - 如果想自定义每日基准投资金额，可以添加：
+   - **Name**：输入 `BASELINE_INVESTMENT`
+   - **Secret**：输入金额数字（如 `10` 表示每日基准 $10）
+   - 如果不配置，默认使用 **$5.0**
+
+9. **（可选）配置图表主题**
+   - 如果想自定义图表主题，可以添加：
+   - **Name**：输入 `DCA_CHART_THEME`
+   - **Secret**：输入主题名称（`light`、`midnight` 或 `neon`）
+   - 如果不配置，默认使用 **light** 主题
+
 > **💡 常见问题**：
 > - **Q: 需要配置 GITHUB_TOKEN 吗？**  
 >   A: **不需要！** GitHub 会自动提供，手动添加反而会出错。
@@ -166,6 +178,9 @@ GitHub Action 是 GitHub 提供的免费自动化服务，可以让你在云端�
 > 
 > - **Q: 为什么看不到密钥的值？**  
 >   A: 这是 GitHub 的安全机制，添加后无法查看，只能删除重建。
+> 
+> - **Q: BASELINE_INVESTMENT 设置多少合适？**  
+>   A: 建议根据个人财务状况设置，新手可以从 $5-$10 开始，熟悉后可以调整。
 
 ---
 
@@ -330,12 +345,16 @@ python -m venv .venv
 pip install --upgrade pip
 pip install -r requirements.txt
 
-# 4. 配置环境变量
+# 4. 配置环境变量（必需）
 $env:OKX_API_KEY     = "你的OKX_API_KEY"
 $env:OKX_SECRET_KEY  = "你的OKX_SECRET_KEY"
 $env:OKX_PASSWORD    = "你的OKX_PASSWORD"
 $env:GITHUB_REPOSITORY = "你的用户名/仓库名"
 $env:GITHUB_TOKEN      = "你的GitHub个人访问令牌"
+
+# （可选）自定义投资金额和图表主题
+$env:BASELINE_INVESTMENT = "10"          # 默认 5.0
+$env:DCA_CHART_THEME     = "midnight"    # 默认 light
 
 # 5. 运行机器人
 python trade_bot.py
@@ -355,12 +374,16 @@ source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 
-# 4. 配置环境变量
+# 4. 配置环境变量（必需）
 export OKX_API_KEY="你的OKX_API_KEY"
 export OKX_SECRET_KEY="你的OKX_SECRET_KEY"
 export OKX_PASSWORD="你的OKX_PASSWORD"
 export GITHUB_REPOSITORY="你的用户名/仓库名"
 export GITHUB_TOKEN="你的GitHub个人访问令牌"
+
+# （可选）自定义投资金额和图表主题
+export BASELINE_INVESTMENT="10"          # 默认 5.0
+export DCA_CHART_THEME="midnight"        # 默认 light
 
 # 5. 运行机器人
 python trade_bot.py
@@ -452,10 +475,32 @@ CSV 格式的交易历史记录，包含字段：
 4. **市场时间**：某些时段可能无法交易
 
 ### Q: 如何修改投资金额？
-**A:** 可以通过以下方式调整：
-1. **环境变量**：设置 `BASELINE_INVESTMENT` 环境变量
-2. **修改代码**：编辑 `trade_bot.py` 中的默认值
-3. **GitHub Secrets**：在仓库 Secrets 中添加 `BASELINE_INVESTMENT`
+**A:** 有三种方式调整每日基准投资金额（默认 $5）：
+
+1. **GitHub Actions（推荐）**：
+   - 进入仓库 **Settings** → **Secrets and variables** → **Actions**
+   - 点击 **New repository secret**
+   - Name：`BASELINE_INVESTMENT`
+   - Secret：输入金额数字（如 `10` 表示每日基准 $10）
+   - 保存后下次运行自动生效
+
+2. **本地运行**：
+   ```bash
+   # Windows PowerShell
+   $env:BASELINE_INVESTMENT = "10"
+   python trade_bot.py
+   
+   # macOS/Linux
+   export BASELINE_INVESTMENT="10"
+   python trade_bot.py
+   ```
+
+3. **修改代码（不推荐）**：
+   - 编辑 `trade_bot.py` 第 30 行的 `DEFAULT_BASELINE_INVESTMENT = 5.0`
+   - 改为你想要的金额
+   - 注意：代码修改会影响所有未来的更新
+
+> **💡 提示**：机器人会根据 AHR999 指标自动调整实际投资金额（0-4倍基准金额），这里设置的是基准值。
 
 ### Q: 图表没有生成？
 **A:** 检查：

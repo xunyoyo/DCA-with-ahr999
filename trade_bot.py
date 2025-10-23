@@ -24,9 +24,21 @@ import matplotlib.dates as mdates
 from scipy.interpolate import make_interp_spline
 
 # ==============================================================================
-# SECTION 1: FINAL STRATEGY PARAMETERS (Unchanged)
+# SECTION 1: FINAL STRATEGY PARAMETERS
 # ==============================================================================
-BASELINE_INVESTMENT = 5.0
+# 基准投资额：优先从环境变量读取，否则使用默认值
+DEFAULT_BASELINE_INVESTMENT = 5.0
+try:
+    BASELINE_INVESTMENT = float(os.getenv("BASELINE_INVESTMENT", DEFAULT_BASELINE_INVESTMENT))
+    if BASELINE_INVESTMENT <= 0:
+        print(f"⚠️ Invalid BASELINE_INVESTMENT value: {BASELINE_INVESTMENT}, using default: {DEFAULT_BASELINE_INVESTMENT}")
+        BASELINE_INVESTMENT = DEFAULT_BASELINE_INVESTMENT
+    else:
+        print(f"✅ Using BASELINE_INVESTMENT: ${BASELINE_INVESTMENT}")
+except (ValueError, TypeError):
+    print(f"⚠️ Invalid BASELINE_INVESTMENT format, using default: ${DEFAULT_BASELINE_INVESTMENT}")
+    BASELINE_INVESTMENT = DEFAULT_BASELINE_INVESTMENT
+
 OKX_SYMBOL = "BTC/USDT"
 GENESIS = dt.date(2009, 1, 3)
 ALPHA = 1.5
