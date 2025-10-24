@@ -527,6 +527,14 @@ CSV 格式的交易历史记录，包含字段：
 3. **小额测试**：先用小金额测试，确认无误后再增加投资
 4. **定期检查**：定期查看交易记录和账户状态
 
+### Q: Fork 后如何保护个人交易隐私？
+**A:** 如果你 Fork 了本仓库，建议采取以下措施保护交易隐私：
+1. **清空历史记录**：首次运行前，清空 `trade_log.csv` 内容（只保留表头 `date,buy_usd,buy_btc,price_usd`）
+2. **添加到 .gitignore**：将 `trade_log.csv` 和 `*.png` 添加到 `.gitignore` 文件，避免提交个人数据
+3. **使用私有仓库**：将 Fork 的仓库设为 Private，完全保护隐私
+
+> **💡 提示**：本仓库的 `trade_log.csv` 包含原作者的测试数据，建议 Fork 后立即清空。
+
 ## 🛠️ 故障排除
 
 ### 错误：`ModuleNotFoundError: No module named 'ccxt'`

@@ -397,20 +397,26 @@ def _style_axes(ax, theme_config: dict):
 
 
 def generate_dashboard_charts(log_df: pd.DataFrame, theme_key=None):
-    if log_df is None or len(log_df) < 2:
-        print("Not enough data to generate charts.")
+    if log_df is None or len(log_df) == 0:
+        print("⚠️ No data to generate charts.")
         return
     
     try:
         df = log_df.copy()
         # 清理数据：去除空行和无效数据
-        df = df.dropna(subset=['date', 'buy_usd', 'buy_btc', 'price_usd'])
-        df = df[df['buy_usd'] > 0]  # 确保买入金额大于0
-        df = df.reset_index(drop=True)  # 重置索引
+        df = df.dropna(subset=['date', 'price_usd'])
+        df = df[df['price_usd'] > 0]  # 确保价格数据有效
+        df = df.reset_index(drop=True)
         
-        if len(df) < 2:
-            print("Not enough valid data after cleaning.")
+        # 只保留有实际投资的数据用于图表生成
+        df_invested = df[df['buy_usd'] > 0].copy()
+        
+        if len(df_invested) < 1:
+            print("⚠️ No investment data yet. Charts will be generated after first trade.")
             return
+        
+        # Use invested data for chart generation
+        df = df_invested
         
         df['date'] = pd.to_datetime(df['date'])
         df['invest_cum'] = df['buy_usd'].cumsum()
@@ -636,19 +642,25 @@ def main():
             if not final_filled and final_cost > 0 and final_average > 0: final_filled = final_cost / final_average
             new_log_entry = {'date': dt.date.today().isoformat(), 'buy_usd': final_cost, 'buy_btc': final_filled, 'price_usd': final_average}
             
-            try:
-                log_df = pd.read_csv(LOG_FILE) if os.path.exists(LOG_FILE) and os.path.getsize(LOG_FILE) > 0 else pd.DataFrame()
-                log_df = pd.concat([log_df, pd.DataFrame([new_log_entry])], ignore_index=True)
-                log_df.to_csv(LOG_FILE, index=False)
-                print(f"✅ Appended transaction to {LOG_FILE}: {new_log_entry}")
-            except Exception as e: print(f"Error while updating CSV log: {e}")
-            
             final_issue_title = f"✅ Trade Successful: Spent ${new_log_entry['buy_usd']:.2f} on {OKX_SYMBOL}"
             execution_log = f"### 📈 Trade Execution\n- **Status:** `SUCCESS`\n- **Order ID:** `{order.get('id', 'N/A')}`"
         else:
+            # Even if trade is skipped, log today's price for chart generation
+            new_log_entry = {'date': dt.date.today().isoformat(), 'buy_usd': 0.0, 'buy_btc': 0.0, 'price_usd': price_now}
             final_issue_title = f"🟡 Trade Skipped: Amount was `{investment_amount}`"
             execution_log = f"### 📈 Trade Execution\n- **Status:** `SKIPPED`"
             print("Investment amount invalid or too small, skipping trade.")
+        
+        # Always update log file (defensive: create if not exists)
+        try:
+            log_df = pd.read_csv(LOG_FILE) if os.path.exists(LOG_FILE) and os.path.getsize(LOG_FILE) > 0 else pd.DataFrame(columns=['date', 'buy_usd', 'buy_btc', 'price_usd'])
+            log_df = pd.concat([log_df, pd.DataFrame([new_log_entry])], ignore_index=True)
+            log_df.to_csv(LOG_FILE, index=False)
+            print(f"✅ Appended to {LOG_FILE}: {new_log_entry}")
+        except Exception as e: 
+            print(f"⚠️ Error updating CSV log: {e}")
+            # Create new file if error occurs
+            pd.DataFrame([new_log_entry]).to_csv(LOG_FILE, index=False)
 
     except Exception as e:
         final_issue_title = f"🔴 TRADE FAILED"
@@ -656,18 +668,28 @@ def main():
         print(f"🔴🔴🔴 An error occurred: {e} 🔴🔴🔴")
     
     finally:
+        # Defensive: Always try to load log file, create empty DataFrame if fails
         final_log_df = None
-        if os.path.exists(LOG_FILE) and os.path.getsize(LOG_FILE) > 0:
-            final_log_df = pd.read_csv(LOG_FILE)
-            # 清理数据：去除空行
-            final_log_df = final_log_df.dropna(subset=['date'])
-            final_log_df = final_log_df.reset_index(drop=True)
+        try:
+            if os.path.exists(LOG_FILE) and os.path.getsize(LOG_FILE) > 0:
+                final_log_df = pd.read_csv(LOG_FILE)
+                # 清理数据：去除空行和无效数据
+                final_log_df = final_log_df.dropna(subset=['date'])
+                final_log_df = final_log_df[final_log_df['price_usd'] > 0]  # Keep entries with valid price
+                final_log_df = final_log_df.reset_index(drop=True)
+        except Exception as e:
+            print(f"⚠️ Error loading log file: {e}")
+            final_log_df = None
             
-        if price_now and math.isfinite(price_now):
+        if price_now and math.isfinite(price_now) and final_log_df is not None and len(final_log_df) > 0:
             portfolio_summary_log = calculate_portfolio_summary(final_log_df, price_now)
-            generate_dashboard_charts(final_log_df, theme_key=os.getenv("DCA_CHART_THEME", DEFAULT_CHART_THEME)) # Call the new main charting function
+            try:
+                generate_dashboard_charts(final_log_df, theme_key=os.getenv("DCA_CHART_THEME", DEFAULT_CHART_THEME))
+                print("✅ Dashboard charts generated successfully")
+            except Exception as e:
+                print(f"⚠️ Error generating charts: {e}")
         else:
-            portfolio_summary_log = "### 📊 Portfolio Summary\n- Could not fetch current price to generate summary."
+            portfolio_summary_log = "### 📊 Portfolio Summary\n- Could not fetch current price or no valid data to generate summary."
 
         market_data_log = (f"### Market Data\n- **Timestamp:** `{start_time.strftime('%Y-%m-%d %H:%M:%S')}` UTC\n"
                            f"- **Price ({OKX_SYMBOL}):** `{price_now}`\n- **AHR999 Index:** `{investment_data.get('ahr999_index', 'N/A')}`")
