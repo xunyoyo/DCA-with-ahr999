@@ -183,9 +183,9 @@ def _plot_roi_curve(ax, df, palette):
     # 绘制平滑曲线，增加渐变效果
     ax.plot(x_smooth, y_smooth, label="Portfolio ROI", color=palette['roi'], linewidth=2.8, alpha=0.9)
     
-    # 添加原始数据点作为标记（每隔一定间隔显示）
-    step = max(len(df) // 15, 1)
-    ax.scatter(df['date'][::step], df['roi'][::step] * 100, color=palette['roi'], s=40, alpha=0.6, zorder=5)
+    # 添加所有原始数据点作为标记
+    ax.scatter(df['date'], df['roi'] * 100, 
+               color=palette['roi'], s=40, alpha=0.6, zorder=5, edgecolors='white', linewidths=0.5)
     
     # 填充正负区域
     ax.fill_between(x_smooth, 0, y_smooth, where=(np.array(y_smooth)>=0), 
@@ -207,9 +207,9 @@ def _plot_equity_curve(ax, df, palette):
     # 绘制平滑曲线
     ax.plot(x_smooth, y_smooth, label="Portfolio Value", color=palette['value'], linewidth=2.8, alpha=0.9)
     
-    # 添加数据点标记
-    step = max(len(df) // 15, 1)
-    ax.scatter(df['date'][::step], df['value_usd'][::step], color=palette['value'], s=40, alpha=0.6, zorder=5)
+    # 添加所有数据点标记
+    ax.scatter(df['date'], df['value_usd'], 
+               color=palette['value'], s=40, alpha=0.6, zorder=5, edgecolors='white', linewidths=0.5)
     
     # 添加渐变填充效果
     ax.fill_between(x_smooth, 0, y_smooth, facecolor=palette['value'], alpha=0.1)
@@ -230,10 +230,11 @@ def _plot_value_vs_cost(ax, df, palette):
     ax.plot(x_smooth, y_value_smooth, label="Portfolio Value", color=palette['value'], linewidth=2.8, alpha=0.9)
     ax.plot(x_smooth, y_cost_smooth, label="Cumulative Cost", color=palette['cost'], linewidth=2.8, alpha=0.9, linestyle='-')
     
-    # 添加数据点标记
-    step = max(len(df) // 15, 1)
-    ax.scatter(df['date'][::step], df['value_usd'][::step], color=palette['value'], s=40, alpha=0.6, zorder=5)
-    ax.scatter(df['date'][::step], df['invest_cum'][::step], color=palette['cost'], s=40, alpha=0.6, zorder=5)
+    # 添加所有数据点标记
+    ax.scatter(df['date'], df['value_usd'], 
+               color=palette['value'], s=40, alpha=0.6, zorder=5, edgecolors='white', linewidths=0.5)
+    ax.scatter(df['date'], df['invest_cum'], 
+               color=palette['cost'], s=40, alpha=0.6, zorder=5, edgecolors='white', linewidths=0.5)
     
     # 填充盈亏区域（使用平滑数据）
     ax.fill_between(x_smooth, y_cost_smooth, y_value_smooth, 
@@ -262,9 +263,9 @@ def _plot_daily_investment(ax, df, palette):
     # 绘制投资额曲线
     ax.plot(x_smooth, y_smooth, label="Daily Investment", color=palette['cost'], linewidth=2.8, alpha=0.9)
     
-    # 添加数据点
-    step = max(len(df) // 15, 1)
-    ax.scatter(df['date'][::step], df['buy_usd'][::step], color=palette['cost'], s=40, alpha=0.6, zorder=5)
+    # 添加所有数据点
+    ax.scatter(df['date'], df['buy_usd'], 
+               color=palette['cost'], s=40, alpha=0.6, zorder=5, edgecolors='white', linewidths=0.5)
     
     # 添加基准线
     ax.axhline(baseline, color='grey', linewidth=1.5, linestyle='--', alpha=0.6, label=f'Baseline (${baseline:.2f})')
@@ -288,9 +289,9 @@ def _plot_btc_accumulation(ax, df, palette):
     # 绘制BTC累计曲线
     ax.plot(x_smooth, y_smooth, label="BTC Holdings", color=palette['roi'], linewidth=2.8, alpha=0.9)
     
-    # 添加数据点
-    step = max(len(df) // 15, 1)
-    ax.scatter(df['date'][::step], df['hold_btc_cum'][::step], color=palette['roi'], s=40, alpha=0.6, zorder=5)
+    # 添加所有数据点
+    ax.scatter(df['date'], df['hold_btc_cum'], 
+               color=palette['roi'], s=40, alpha=0.6, zorder=5, edgecolors='white', linewidths=0.5)
     
     # 添加渐变填充
     ax.fill_between(x_smooth, 0, y_smooth, facecolor=palette['roi'], alpha=0.15)
@@ -314,10 +315,11 @@ def _plot_avg_cost_vs_price(ax, df, palette):
     ax.plot(x_smooth, y_price_smooth, label="BTC Price", color=palette['value'], linewidth=2.8, alpha=0.9)
     ax.plot(x_smooth, y_cost_smooth, label="Average Cost", color=palette['cost'], linewidth=2.8, alpha=0.9)
     
-    # 添加数据点
-    step = max(len(df) // 15, 1)
-    ax.scatter(df['date'][::step], df['price_usd'][::step], color=palette['value'], s=40, alpha=0.6, zorder=5)
-    ax.scatter(df['date'][::step], df['avg_cost'][::step], color=palette['cost'], s=40, alpha=0.6, zorder=5)
+    # 添加所有数据点
+    ax.scatter(df['date'], df['price_usd'], 
+               color=palette['value'], s=40, alpha=0.6, zorder=5, edgecolors='white', linewidths=0.5)
+    ax.scatter(df['date'], df['avg_cost'], 
+               color=palette['cost'], s=40, alpha=0.6, zorder=5, edgecolors='white', linewidths=0.5)
     
     # 填充盈亏区域
     ax.fill_between(x_smooth, y_cost_smooth, y_price_smooth,
@@ -347,10 +349,11 @@ def _plot_strategy_comparison(ax, df, palette):
     ax.plot(x_smooth, y_smart_smooth, label="Smart DCA (AHR999)", color=palette['roi'], linewidth=2.8, alpha=0.9)
     ax.plot(x_smooth, y_regular_smooth, label="Regular DCA (Fixed)", color=palette['cost'], linewidth=2.8, alpha=0.9, linestyle='--')
     
-    # 添加数据点
-    step = max(len(df) // 15, 1)
-    ax.scatter(df['date'][::step], df['roi'][::step] * 100, color=palette['roi'], s=40, alpha=0.6, zorder=5)
-    ax.scatter(df['date'][::step], df['regular_roi'][::step] * 100, color=palette['cost'], s=40, alpha=0.6, zorder=5)
+    # 添加所有数据点
+    ax.scatter(df['date'], df['roi'] * 100, 
+               color=palette['roi'], s=40, alpha=0.6, zorder=5, edgecolors='white', linewidths=0.5)
+    ax.scatter(df['date'], df['regular_roi'] * 100, 
+               color=palette['cost'], s=40, alpha=0.6, zorder=5, edgecolors='white', linewidths=0.5)
     
     # 填充优势区域
     ax.fill_between(x_smooth, y_regular_smooth, y_smart_smooth,
@@ -400,6 +403,15 @@ def generate_dashboard_charts(log_df: pd.DataFrame, theme_key=None):
     
     try:
         df = log_df.copy()
+        # 清理数据：去除空行和无效数据
+        df = df.dropna(subset=['date', 'buy_usd', 'buy_btc', 'price_usd'])
+        df = df[df['buy_usd'] > 0]  # 确保买入金额大于0
+        df = df.reset_index(drop=True)  # 重置索引
+        
+        if len(df) < 2:
+            print("Not enough valid data after cleaning.")
+            return
+        
         df['date'] = pd.to_datetime(df['date'])
         df['invest_cum'] = df['buy_usd'].cumsum()
         df['hold_btc_cum'] = df['buy_btc'].cumsum()
@@ -647,6 +659,9 @@ def main():
         final_log_df = None
         if os.path.exists(LOG_FILE) and os.path.getsize(LOG_FILE) > 0:
             final_log_df = pd.read_csv(LOG_FILE)
+            # 清理数据：去除空行
+            final_log_df = final_log_df.dropna(subset=['date'])
+            final_log_df = final_log_df.reset_index(drop=True)
             
         if price_now and math.isfinite(price_now):
             portfolio_summary_log = calculate_portfolio_summary(final_log_df, price_now)
