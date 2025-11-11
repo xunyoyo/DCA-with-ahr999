@@ -593,9 +593,29 @@ def calculate_continuous_multiplier(x: float) -> float:
     if not math.isfinite(x) or x <= 0: return 1.0
     if x < NEUTRAL_X: return 1.0 + ALPHA * math.log(NEUTRAL_X/x)
     else: return max(0.0, 1.0 - BETA * math.log1p(x-NEUTRAL_X))
+def _harmonic_mean(values: np.ndarray) -> float:
+    """Return the harmonic mean of positive, finite values.
+
+    The original implementation used ``200/(1/x).sum()`` which worked for
+    strictly-positive data but collapsed to zero or ``nan`` when a zero or
+    invalid value slipped into the window. That behaviour propagated downstream
+    and broke the AHR999 index calculation. We explicitly ignore non-positive or
+    non-finite entries so a single bad tick does not poison the rolling mean.
+    """
+
+    arr=np.asarray(values, dtype=float)
+    mask=np.isfinite(arr) & (arr>0)
+    if not mask.any():
+        return np.nan
+    reciprocal_sum=np.sum(1.0/arr[mask])
+    if reciprocal_sum==0:
+        return np.nan
+    return mask.sum()/reciprocal_sum
+
+
 def get_today_investment_amount(historical_df: pd.DataFrame, baseline: float) -> dict:
     prices=historical_df["price"].astype(float)
-    dca200=prices.rolling(window=200, min_periods=200).apply(lambda x: 200/(1/x).sum(), raw=True).iloc[-1]
+    dca200=prices.rolling(window=200, min_periods=200).apply(_harmonic_mean, raw=True).iloc[-1]
     age_today=(dt.date.today()-GENESIS).days; estimate_today=index_growth_estimate(age_today)
     price_today=prices.iloc[-1]
     if not np.isfinite(dca200) or not np.isfinite(price_today): return {"investment_usd": np.nan, "price_today": price_today, "ahr999_index": np.nan}
