@@ -1,577 +1,356 @@
-# AHR999 智能定投机器人
+# 比特币定投机器人 - 基于AHR999指标
 
 ![Pic](./dashboard_comprehensive.png)
 
-基于 AHR999 指标的比特币智能定投策略，在 OKX 交易所自动执行每日定投，并提供丰富的可视化数据仪表盘。
+## 这是什么？
 
-## ✨ 项目亮点
-- **智能买入**：基于 AHR999 指标动态调整每日投入金额，自动下单至 OKX 现货市场。
-- **综合仪表盘**：自动生成包含 7 个可视化图表的综合仪表盘，全方位展示投资表现：
-  - ROI 投资回报曲线
-  - 资产净值增长曲线
-  - 投入成本 vs 当前价值对比
-  - 每日投资额动态变化
-  - BTC 累积持仓走势
-  - 平均成本 vs 实时价格
-  - 智能定投 vs 普通定投策略对比
-- **多种图表主题**：支持三种精美主题（简约白底、暗黑仪表盘、科技霓虹），满足不同审美需求。
-- **运营日志**：所有成交记录保存在 `trade_log.csv`，支持复盘与数据分析。
-- **GitHub 自动同步**：运行结果自动推送到仓库 Issue，便于团队追踪与审计。
+这是一个**自动买比特币**的程序。它每天在OKX交易所自动帮你买一点比特币，不是固定金额，而是根据价格高低智能调整买入金额。
 
-## 🏗️ 技术栈
-- **Python 3.10+**：现代化的 Python 开发环境
-- **[ccxt](https://github.com/ccxt/ccxt)**：统一访问加密货币交易所 API
-- **pandas / numpy**：高性能数据处理与科学计算
-- **matplotlib**：生成高分辨率数据可视化图表
-- **scipy**：样条插值算法，实现平滑曲线效果
-- **requests**：与 GitHub API 通信，自动推送运行报告
+简单说：**比特币便宜的时候多买点，贵的时候少买点或不买。**
 
-## ⚙️ GitHub Action 自动化
+### 投资什么？
+- **标的**：比特币（BTC）
+- **交易所**：OKX现货市场
+- **方式**：市价买入（用USDT买BTC）
 
-### 🎯 什么是 GitHub Action？
-GitHub Action 是 GitHub 提供的免费自动化服务，可以让你在云端自动运行代码，无需自己的服务器。这个项目已经配置好了自动化工作流，可以每天自动执行交易策略。
+### 钱怎么动？
 
-### 🚀 快速开始（新手必读）
+程序会根据"AHR999指标"来决定每天投多少钱。你需要设置一个**基准金额**（比如每天5美元），然后程序会根据市场情况调整：
 
-> **💡 适合对象**：完全不懂编程的新手也能 5 分钟完成配置！  
-> **⏱️ 预计时间**：首次配置约 10-15 分钟（含 OKX API 申请）  
-> **💰 成本**：完全免费！GitHub Actions 提供免费额度，足够每日运行
+**举个例子**（假设你设置基准金额是5美元）：
+- 比特币很便宜时（AHR999 < 0.45）：买 **$20**（4倍基准）
+- 比特币比较便宜（AHR999 ≈ 0.7）：买 **$10**（2倍基准）
+- 比特币价格正常（AHR999 ≈ 1.0）：买 **$5**（1倍基准）
+- 比特币有点贵（AHR999 ≈ 1.5）：买 **$2**（0.4倍基准）
+- 比特币太贵了（AHR999 > 2.0）：**不买**（等便宜了再说）
 
----
+**资金范围**：每天投入金额在 **0到4倍基准金额** 之间浮动。如果你设置基准是$10，那么单日最少$0，最多$40。
 
-#### 🔰 前置准备
+### 什么是AHR999？
 
-在开始之前，请确保你已经：
+AHR999是一个判断比特币贵不贵的指标，数值越小说明越便宜。它通过比较：
+1. 当前价格 vs 过去200天的平均价格
+2. 当前价格 vs 比特币的"理论增长价格"
 
-- ✅ 拥有 GitHub 账号（[点击注册](https://github.com/signup)，完全免费）
-- ✅ 拥有 OKX 账户（[点击注册](https://www.okx.com)）
-- ✅ 注册时建议填写本人邀请码**>35373898<**手续费反佣20%
-- ✅ OKX 账户中有 USDT 余额（建议至少 $20 以上，用于定投）
-- ✅ 已完成 OKX 身份验证（KYC）
+这个指标由国内比特币玩家"ahr999"发明，在币圈比较有名。
+
+### 为什么要这样投？
+
+对比传统定投（每天固定买$5）：
+- 传统方式：不管价格高低，每天都买$5
+- AHR999方式：在便宜的时候多买（比如$15），贵的时候少买或不买
+
+**实际效果**：长期来看，这种方式能拿到更低的平均成本，收益通常比傻傻地固定定投要好。
 
 ---
 
-#### 第一步：Fork（复制）本仓库到你的账号
+## 功能说明
 
-**操作步骤：**
-
-1. **点击右上角 Fork 按钮**  
-   在本仓库页面右上角，找到并点击 **"Fork"** 按钮（星标旁边）
-
-2. **选择你的账号**  
-   在弹出页面中，选择你的 GitHub 账号作为目标
-
-3. **等待复制完成**  
-   几秒钟后，你的账号下就会有一个完整的副本仓库
-
-4. **验证成功**  
-   浏览器地址栏应该显示：`github.com/你的用户名/DCA-with-ahr999`
-
-> **📌 为什么要 Fork？**  
-> Fork 后这个机器人就完全属于你了，你可以自由修改参数、查看运行记录，而不会影响原仓库。
+- **全自动交易**：通过GitHub Actions免费云服务器，每天自动运行
+- **可视化图表**：自动生成7张图表，包括收益曲线、持仓变化、策略对比等
+- **交易记录**：所有买入记录保存在CSV文件，方便导出分析
+- **运行报告**：每次运行结果会自动发到GitHub Issue
 
 ---
 
-#### 第二步：获取 OKX API 密钥
+## 快速开始（新手向）
 
-**详细操作流程：**
+### 你需要准备什么？
 
-1. **登录 OKX 并进入 API 管理页面**
-   - 登录 [OKX](https://www.okx.com)
-   - 点击右上角头像 → **API**
-   - 或直接访问：https://www.okx.com/account/my-api
+1. 一个GitHub账号（免费注册：https://github.com/signup）
+2. 一个OKX交易所账号（注册地址：https://www.okx.com，建议用邀请码 **35373898** 可省20%手续费）
+3. OKX账户里有点USDT（建议至少$20起步）
+4. 完成OKX实名认证
 
-2. **创建新的 API 密钥**
-   - 点击 **"创建 API"** 按钮
-   - 选择 API 类型：**交易 API**（Trade API）
+大概需要15分钟完成配置，**完全免费运行**（GitHub Actions提供免费额度）。
 
-3. **配置 API 权限（重要！）**
-   - ✅ **读取**（Read）：必须勾选
-   - ✅ **交易**（Trade）：必须勾选
-   - ❌ **提现**（Withdraw）：**不要勾选**（安全考虑）
-   - 备注名称：可填写 "DCA Bot" 便于识别
+### 配置步骤
 
-4. **设置 IP 白名单（可选但推荐）**
-   - 如果不确定，可以先选择 **"无限制"**
-   - 后期可以添加 GitHub Actions 的 IP 范围以提高安全性
+#### 第一步：Fork这个项目
 
-5. **设置密码短语（Passphrase）**
-   - 输入一个自定义的密码短语（6-32位字符）
-   - **务必记录下来**，后面会用到！
+1. 点击页面右上角的 **Fork** 按钮
+2. 选择你的GitHub账号
+3. 等几秒钟，你的账号下就会有这个项目的副本了
+4. 确认浏览器地址变成了：`github.com/你的用户名/DCA-with-ahr999`
 
-6. **完成安全验证**
-   - 输入资金密码、邮箱验证码、手机验证码等
-   - 点击 **"确认"**
+Fork的意思就是复制一份到你自己的账号，之后所有操作都在你的副本里进行，不会影响原项目。
 
-7. **复制并保存三个密钥**  
-   ⚠️ **关键步骤：这些信息只显示一次，务必立即保存！**
-   - **API Key**（以 `xxx` 开头的长字符串）
-   - **Secret Key**（以 `xxx` 开头的长字符串）
-   - **Passphrase**（你刚才设置的密码短语）
+**⚠️ 重要：删除原CSV文件！**
 
-> **🔒 安全提示**：
-> - 将这三个密钥保存到密码管理器或安全的地方
-> - 不要分享给任何人
-> - 不要截图发到社交媒体
-> - 如果泄露，立即在 OKX 删除该 API 并重新创建
+Fork后，项目里的 `trade_log.csv` 是我（原作者）的交易记录，不是你的。**在运行Action之前，必须先删除这个文件**，否则你的交易数据会追加到我的记录里，图表和统计就全乱了。
 
----
+删除方法：
+1. 进入你Fork的项目
+2. 点击 `trade_log.csv` 文件
+3. 点击右上角的垃圾桶图标（Delete this file）
+4. 点击"Commit changes"确认删除
 
-#### 第三步：在 GitHub 中配置密钥
+删除后，程序第一次运行时会自动创建一个新的CSV文件，里面就只有你自己的交易记录了。
 
-**详细操作流程：**
+#### 第二步：获取OKX的API密钥
 
-1. **进入你 Fork 的仓库**
-   - 确保地址栏是：`github.com/你的用户名/DCA-with-ahr999`
+1. 登录OKX，点击右上角头像 → **API**（或直接访问 https://www.okx.com/account/my-api）
+2. 点击"创建API"，选择"交易API"
+3. 权限设置：
+   - **读取**：勾选
+   - **交易**：勾选
+   - **提现**：不要勾选（安全考虑）
+4. 设置一个密码短语（Passphrase），自己想一个，比如 `MyBot2024`
+5. 完成验证后，会显示三个密钥：
+   - **API Key**（一串以xxx开头的字符）
+   - **Secret Key**（一串以xxx开头的字符）
+   - **Passphrase**（就是你刚才设的密码短语）
 
-2. **打开设置页面**
-   - 点击仓库顶部的 **"Settings"**（设置）标签
-   - ⚠️ 如果看不到 Settings，说明你不在自己 Fork 的仓库
+**重要**：这些密钥只显示一次，立即保存到安全的地方（密码管理器或记事本），千万别发给别人。
 
-3. **进入 Secrets 管理**
-   - 在左侧菜单找到 **"Secrets and variables"**
-   - 点击展开，选择 **"Actions"**
+#### 第三步：在GitHub配置密钥
 
-4. **添加第一个密钥：OKX_API_KEY**
-   - 点击右上角 **"New repository secret"** 按钮
-   - **Name（名称）**：输入 `OKX_API_KEY`（必须完全一致，区分大小写）
-   - **Secret（值）**：粘贴你的 OKX API Key
-   - 点击 **"Add secret"**
+1. 进入你Fork的项目，点击 **Settings**（顶部标签栏）
+2. 左侧菜单找到 **Secrets and variables** → 点击 **Actions**
+3. 点击 **New repository secret**，依次添加三个密钥：
 
-5. **添加第二个密钥：OKX_SECRET_KEY**
-   - 再次点击 **"New repository secret"**
-   - **Name**：输入 `OKX_SECRET_KEY`
-   - **Secret**：粘贴你的 OKX Secret Key
-   - 点击 **"Add secret"**
+   **密钥1**：
+   - Name：`OKX_API_KEY`
+   - Secret：粘贴你的API Key
 
-6. **添加第三个密钥：OKX_PASSWORD**
-   - 再次点击 **"New repository secret"**
-   - **Name**：输入 `OKX_PASSWORD`
-   - **Secret**：粘贴你的 OKX Passphrase（密码短语）
-   - 点击 **"Add secret"**
+   **密钥2**：
+   - Name：`OKX_SECRET_KEY`
+   - Secret：粘贴你的Secret Key
 
-7. **验证配置完成**
-   - 你应该看到三个 Secrets：
-     - `OKX_API_KEY`
-     - `OKX_SECRET_KEY`
-     - `OKX_PASSWORD`
-   - ✅ 绿色对勾表示配置成功
+   **密钥3**：
+   - Name：`OKX_PASSWORD`
+   - Secret：粘贴你的Passphrase
 
-8. **（可选）配置每日投资金额**
-   - 如果想自定义每日基准投资金额，可以添加：
-   - **Name**：输入 `BASELINE_INVESTMENT`
-   - **Secret**：输入金额数字（如 `10` 表示每日基准 $10）
-   - 如果不配置，默认使用 **$5.0**
+4. （可选）设置每日基准投资金额：
+   - Name：`BASELINE_INVESTMENT`
+   - Secret：输入数字，比如 `10` 表示基准$10/天
+   - 不设置的话默认是$5/天
 
-9. **（可选）配置图表主题**
-   - 如果想自定义图表主题，可以添加：
-   - **Name**：输入 `DCA_CHART_THEME`
-   - **Secret**：输入主题名称（`light`、`midnight` 或 `neon`）
-   - 如果不配置，默认使用 **light** 主题
+#### 第四步：启用自动运行
 
-> **💡 常见问题**：
-> - **Q: 需要配置 GITHUB_TOKEN 吗？**  
->   A: **不需要！** GitHub 会自动提供，手动添加反而会出错。
-> 
-> - **Q: 密钥可以修改吗？**  
->   A: 可以！点击密钥名称 → Remove → 重新添加即可。
-> 
-> - **Q: 为什么看不到密钥的值？**  
->   A: 这是 GitHub 的安全机制，添加后无法查看，只能删除重建。
-> 
-> - **Q: BASELINE_INVESTMENT 设置多少合适？**  
->   A: 建议根据个人财务状况设置，新手可以从 $5-$10 开始，熟悉后可以调整。
+1. 点击项目顶部的 **Actions** 标签
+2. 如果看到提示说"工作流未启用"，点击绿色按钮启用
+3. 左侧找到 **Daily Investment Bot Runner**
+4. 点击右上角 **Run workflow** → 选择 **main** 分支 → 再次点击 **Run workflow**
+5. 等1-2分钟，刷新页面，看到绿色勾就是成功了
 
----
+运行成功后，你会看到：
+- 项目里出现了 `trade_log.csv` 文件（记录每次买入）
+- 出现了 `dashboard_comprehensive.png` 图表
+- **Issues** 标签页里有一条运行报告
 
-#### 第四步：启用 GitHub Actions 自动化
+**搞定！** 之后每天北京时间上午10点会自动运行。
 
-**详细操作流程：**
+### 修改运行时间（可选）
 
-1. **进入 Actions 页面**
-   - 点击仓库顶部的 **"Actions"** 标签
+默认是每天上午10点运行，如果想改时间：
 
-2. **启用工作流（首次需要）**
-   - 如果看到绿色提示 *"Workflows aren't being run on this forked repository"*
-   - 点击 **"I understand my workflows, go ahead and enable them"** 按钮
+1. 打开项目里的 `.github/workflows/main.yml` 文件
+2. 找到这行：`cron: '0 2 * * *'`
+3. 改成你想要的时间（注意是UTC时区）：
+   - 上午8点：`'0 0 * * *'`
+   - 中午12点：`'0 4 * * *'`
+   - 晚上10点：`'0 14 * * *'`
+4. 点击"Commit changes"保存
 
-3. **找到定投机器人工作流**
-   - 在左侧列表找到 **"Daily Investment Bot Runner"**
-   - 点击进入该工作流
+### 常见问题
 
-4. **启用工作流**
-   - 如果右上角有 **"Enable workflow"** 按钮，点击启用
-   - 如果没有此按钮，说明已经启用
+**Q：为什么没有买入？**
+A：可能是当前AHR999指标显示价格太贵（>2.0），程序会自动跳过不买。这是正常的，等价格回落了自然会买。
 
-5. **首次手动测试运行（推荐）**
-   - 点击右上角 **"Run workflow"** 按钮
-   - 在弹出框中：
-     - 选择分支：**main**（默认）
-     - 点击绿色 **"Run workflow"** 按钮
+**Q：钱会不会亏光？**
+A：程序只会买入，不会卖出。最坏情况是比特币跌了，账面亏损，但币还在。而且便宜的时候会自动多买，长期能摊低成本。
 
-6. **查看运行结果**
-   - 等待 1-2 分钟，页面会显示运行进度
-   - 点击运行记录可以查看详细日志
-   - ✅ 绿色对勾：运行成功
-   - ❌ 红色叉号：运行失败（检查 API 密钥配置）
+**Q：怎么停止运行？**
+A：进入Actions页面，点击工作流，右上角有"Disable workflow"按钮。或者直接删除GitHub里配置的OKX密钥。
 
-7. **检查运行结果**
-   - 运行成功后，检查以下内容：
-     - 仓库中出现 `trade_log.csv` 文件（交易记录）
-     - 仓库中出现 `dashboard_comprehensive.png` 文件（图表）
-     - **Issues** 标签页出现一个新的汇报 Issue
+**Q：我的交易记录别人能看到吗？**
+A：如果你的项目是Public（公开），别人能看到你的交易记录CSV和图表。建议把项目改成Private（私有），或者把 `trade_log.csv` 和 `*.png` 添加到 `.gitignore` 文件里。
 
-> **🎉 恭喜！** 如果首次测试运行成功，说明配置完全正确！
+**特别提醒**：Fork之后记得先删除原作者的 `trade_log.csv` 文件，否则你的交易记录会混在原作者的数据里。
+
+**Q：手续费怎么算？**
+A：OKX现货交易手续费大概0.1%，用邀请码注册可以返佣20%。比如买$10的BTC，实际到手差不多$9.99。
+
+**Q：API密钥安全吗？**
+A：密钥配置在GitHub的Secrets里，别人看不到。而且我们只开启了读取和交易权限，没有提现权限，就算泄露也转不走币。
 
 ---
 
-#### 第五步：设置自动运行（可选配置）
+## 本地运行（懂点编程的可以看）
 
-**默认配置：**
-- 机器人会在每天 **北京时间上午 10:00** 自动运行
-- 对应 UTC 时间 02:00（已配置在工作流中）
+如果你想在自己电脑上跑，而不用GitHub Actions：
 
-**如需修改运行时间：**
+### 准备工作
+- 安装Python 3.10或更高版本
+- 有OKX账号和API密钥
 
-1. **编辑工作流文件**
-   - 进入仓库，点击 `.github/workflows/main.yml` 文件
-   - 点击右上角 **铅笔图标**（Edit this file）
+### Windows系统
 
-2. **修改 cron 表达式**
-   - 找到这一行：`cron: '0 2 * * *'`
-   - 修改为你想要的时间（使用 UTC 时区）
-
-3. **时间对照表**
-   | 北京时间 | UTC时间 | cron 表达式 |
-   |---------|---------|------------|
-   | 上午 8:00 | 00:00 | `'0 0 * * *'` |
-   | 上午 10:00 | 02:00 | `'0 2 * * *'` |
-   | 中午 12:00 | 04:00 | `'0 4 * * *'` |
-   | 下午 18:00 | 10:00 | `'0 10 * * *'` |
-   | 晚上 22:00 | 14:00 | `'0 14 * * *'` |
-
-4. **提交修改**
-   - 点击 **"Commit changes"**
-   - 填写提交说明（如："修改运行时间为中午12点"）
-   - 点击 **"Commit changes"** 确认
-
-> **📌 提示**：  
-> cron 表达式格式：`'分钟 小时 日 月 星期'`  
-> 例如：`'30 2 * * *'` = 每天 UTC 02:30（北京时间 10:30）
-
----
-
-#### ✅ 配置完成检查清单
-
-在完成所有步骤后，请确认：
-
-- [ ] 已成功 Fork 仓库到自己账号
-- [ ] 已在 OKX 创建 API 密钥（交易权限，无提现权限）
-- [ ] 已在 GitHub Secrets 中添加三个密钥
-- [ ] 已启用 GitHub Actions 工作流
-- [ ] 已成功运行一次测试（绿色对勾）
-- [ ] 仓库中出现 `trade_log.csv` 和 `dashboard_comprehensive.png`
-- [ ] Issues 中出现运行汇报
-
-**🎊 全部打勾？恭喜你成功部署了自动定投机器人！**
-
----
-
-#### 📊 后续使用
-
-配置完成后，机器人会：
-1. **每天自动运行**：在设定时间自动执行
-2. **自动买入 BTC**：根据 AHR999 指标智能调整买入金额
-3. **记录交易日志**：所有交易保存在 `trade_log.csv`
-4. **生成可视化图表**：每次运行更新综合仪表盘
-5. **推送运行报告**：在 Issues 中查看每日汇报
-
-### 📅 运行方式
-
-#### 自动运行（推荐）
-- **默认时间**：每天北京时间上午 10:00 自动执行
-- **修改时间**：如需调整，编辑 `.github/workflows/main.yml` 文件中的 `cron: '0 2 * * *'`
-- **时区说明**：`0 2 * * *` 表示 UTC 时间凌晨 2 点，对应北京时间上午 10 点
-
-#### 手动运行
-1. 进入 **Actions** 标签页
-2. 选择 **Daily Investment Bot Runner**
-3. 点击 **Run workflow** 按钮
-4. 选择分支（通常是 `main`）
-5. 点击 **Run workflow** 立即执行
-
-### 🔧 工作流程详解
-每次运行时，机器人会：
-1. 获取最新的比特币价格数据
-2. 计算 AHR999 指标
-3. 根据指标决定买入金额
-4. 在 OKX 执行交易（如果满足条件）
-5. 生成投资报告和图表
-6. 自动提交结果到仓库
-7. 在 GitHub Issue 中发布交易摘要
-
-### 工作流步骤概览
-```mermaid
-graph TD
-   A[Checkout 仓库] --> B[安装 Python 3.10]
-   B --> C[pip install -r requirements.txt]
-   C --> D[运行 trade_bot.py]
-   D --> E{有新日志/图表?}
-   E -- 是 --> F[提交并推送变更]
-   E -- 否 --> G[不提交]
-```
-
-> **提示**：工作流运行时会使用最新提交的代码，确保策略更新后的首个版本已推送到 `main` 分支。
-## 🚀 本地运行（高级用户）
-
-### 前置要求
-- Python 3.10 或更高版本
-- OKX 账户和 API 密钥
-- Git（用于克隆仓库）
-
-### 安装步骤
-
-#### Windows 用户
 ```powershell
-# 1. 克隆仓库
+# 下载项目
 git clone https://github.com/xunyoyo/DCA-with-ahr999.git
 cd DCA-with-ahr999
 
-# 2. 创建虚拟环境（推荐）
+# 创建虚拟环境
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 
-# 3. 安装依赖
-pip install --upgrade pip
+# 安装依赖
 pip install -r requirements.txt
 
-# 4. 配置环境变量（必需）
-$env:OKX_API_KEY     = "你的OKX_API_KEY"
-$env:OKX_SECRET_KEY  = "你的OKX_SECRET_KEY"
-$env:OKX_PASSWORD    = "你的OKX_PASSWORD"
-$env:GITHUB_REPOSITORY = "你的用户名/仓库名"
-$env:GITHUB_TOKEN      = "你的GitHub个人访问令牌"
+# 设置环境变量（改成你自己的密钥）
+$env:OKX_API_KEY = "你的API_KEY"
+$env:OKX_SECRET_KEY = "你的SECRET_KEY"
+$env:OKX_PASSWORD = "你的PASSPHRASE"
+$env:BASELINE_INVESTMENT = "10"  # 可选，默认5美元
 
-# （可选）自定义投资金额和图表主题
-$env:BASELINE_INVESTMENT = "10"          # 默认 5.0
-$env:DCA_CHART_THEME     = "midnight"    # 默认 light
-
-# 5. 运行机器人
+# 运行
 python trade_bot.py
 ```
 
-#### macOS/Linux 用户
+### Mac/Linux系统
+
 ```bash
-# 1. 克隆仓库
+# 下载项目
 git clone https://github.com/xunyoyo/DCA-with-ahr999.git
 cd DCA-with-ahr999
 
-# 2. 创建虚拟环境（推荐）
+# 创建虚拟环境
 python3 -m venv .venv
 source .venv/bin/activate
 
-# 3. 安装依赖
-pip install --upgrade pip
+# 安装依赖
 pip install -r requirements.txt
 
-# 4. 配置环境变量（必需）
-export OKX_API_KEY="你的OKX_API_KEY"
-export OKX_SECRET_KEY="你的OKX_SECRET_KEY"
-export OKX_PASSWORD="你的OKX_PASSWORD"
-export GITHUB_REPOSITORY="你的用户名/仓库名"
-export GITHUB_TOKEN="你的GitHub个人访问令牌"
+# 设置环境变量（改成你自己的密钥）
+export OKX_API_KEY="你的API_KEY"
+export OKX_SECRET_KEY="你的SECRET_KEY"
+export OKX_PASSWORD="你的PASSPHRASE"
+export BASELINE_INVESTMENT="10"  # 可选，默认5美元
 
-# （可选）自定义投资金额和图表主题
-export BASELINE_INVESTMENT="10"          # 默认 5.0
-export DCA_CHART_THEME="midnight"        # 默认 light
-
-# 5. 运行机器人
+# 运行
 python trade_bot.py
 ```
 
-### 🔐 获取 OKX API 密钥
-1. 登录 [OKX](https://www.okx.com) 账户
-2. 进入 **账户** → **API** → **创建API密钥**
-3. 选择 **只读** 和 **交易** 权限
-4. 设置 IP 白名单（可选，但推荐）
-5. 记录生成的 API Key、Secret Key 和 Passphrase
+运行成功后会在当前目录生成 `trade_log.csv` 和图表文件。
 
-### 🔑 获取 GitHub 个人访问令牌
-1. 进入 GitHub **Settings** → **Developer settings** → **Personal access tokens** → **Tokens (classic)**
-2. 点击 **Generate new token (classic)**
-3. 选择 **repo** 权限（完整仓库访问）
-4. 生成并复制令牌（只显示一次，请妥善保存）
+---
 
-> **⚠️ 安全提醒**：
-> - 不要在代码中硬编码 API 密钥
-> - 使用环境变量或 `.env` 文件管理敏感信息
-> - 定期轮换 API 密钥
-> - 限制 API 密钥的权限范围
+## 进阶设置
 
-## 📈 使用方法
-1. 按上述步骤运行 `trade_bot.py`。程序会：
-   - 拉取 OKX 现货 BTC/USDT 日线数据；
-   - 计算 AHR999 指数并确定当日投入金额；
-   - 若条件满足，提交市价买单并记录成交信息；
-   - 更新 `trade_log.csv` 并生成三张图表：`roi_chart.png`、`equity_curve.png`、`value_vs_cost.png`；
-   - 向 GitHub Issue 推送本次运行的摘要报告。
-2. 想切换图表风格，可在运行前设置环境变量 `DCA_CHART_THEME`：
-   - `light`（默认）：简约白底风格
-   - `midnight`：暗黑仪表盘风格
-   - `neon`：科技感霓虹风格
-3. 图表与日志生成在项目根目录，可用于周报、复盘或进一步分析。
+### 图表主题
 
-## 📂 项目结构
+程序支持三种图表风格：
+- `light`：白底简约风（默认）
+- `midnight`：深色酷炫风
+- `neon`：科技霓虹风
+
+在GitHub配置：
+- Name：`DCA_CHART_THEME`
+- Secret：填 `light`、`midnight` 或 `neon`
+
+本地运行加一行环境变量：
+```bash
+export DCA_CHART_THEME="midnight"
+```
+
+### 修改策略参数
+
+如果你懂编程，想调整策略参数，可以编辑 `trade_bot.py` 文件的这几行：
+
+```python
+BASELINE_INVESTMENT = 5.0    # 基准金额
+ALPHA = 1.5                  # 低价加倍系数（越大，便宜时买得越多）
+BETA = 0.8                   # 高价减少系数（越大，贵的时候减得越快）
+DAILY_CAP_X = 4.0           # 单日最高倍数（最多买几倍基准）
+PAUSE_THRESHOLD = 2.0        # 暂停阈值（AHR999超过这个就不买）
+```
+
+**警告**：改参数有风险，建议先小金额测试。
+
+---
+
+## 项目结构
+
 ```
 DCA-with-ahr999/
-├── .github/
-│   └── workflows/
-│       └── main.yml                    # GitHub Actions 自动化工作流配置
-├── trade_bot.py                        # 主程序：策略逻辑 + 交易执行 + 可视化
-├── requirements.txt                    # Python 依赖包列表
-├── trade_log.csv                       # 历史交易日志（运行后生成）
-├── dashboard_comprehensive.png         # 综合仪表盘图表（运行后生成）
-├── README.md                           # 项目说明文档
-└── LICENSE                             # MIT 开源许可证
+├── .github/workflows/
+│   └── main.yml                    # GitHub Actions配置
+├── trade_bot.py                    # 主程序
+├── requirements.txt                # Python依赖
+├── trade_log.csv                   # 交易记录（运行后生成）
+├── dashboard_comprehensive.png     # 图表（运行后生成）
+└── README.md                       # 说明文档
 ```
 
-### 核心文件说明
+核心就是 `trade_bot.py`，它做这些事：
+1. 从OKX获取比特币历史价格（过去250天）
+2. 计算AHR999指标
+3. 根据指标决定今天买多少
+4. 如果要买，就下市价单
+5. 记录到CSV文件
+6. 生成图表
+7. （如果在GitHub上运行）发个Issue汇报
 
-#### `trade_bot.py`
-主程序文件，包含：
-- **策略参数配置**：基准投资额、AHR999 参数、暂停阈值等
-- **AHR999 指标计算**：200 日均价、指数增长估值模型
-- **动态投资决策**：连续乘数计算、投资额调整逻辑
-- **OKX 交易执行**：通过 ccxt 库执行市价买单
-- **数据可视化**：7 个图表的绘制与主题配置
-- **GitHub 集成**：自动创建 Issue 汇报运行结果
+---
 
-#### `trade_log.csv`
-CSV 格式的交易历史记录，包含字段：
-- `date`：交易日期（YYYY-MM-DD）
-- `buy_usd`：买入金额（美元）
-- `buy_btc`：买入数量（BTC）
-- `price_usd`：成交价格（美元/BTC）
+## 故障排查
 
-#### `dashboard_comprehensive.png`
-高分辨率综合仪表盘（24×30 英寸 @ 300 DPI），包含：
-- 顶部统计面板：投资总额、持仓数量、投资表现、当前价格、策略对比
-- 7 个可视化图表：全方位展示投资数据和策略效果
-
-## ❓ 常见问题解答
-
-### Q: GitHub Action 运行失败怎么办？
-**A:** 检查以下几点：
-1. **API 密钥配置**：确保在仓库 Secrets 中正确配置了 OKX 的 API 密钥
-2. **权限问题**：确认 API 密钥有交易权限
-3. **网络问题**：GitHub Action 可能因为网络问题无法访问 OKX API
-4. **查看日志**：在 Actions 页面点击失败的运行，查看详细错误信息
-
-### Q: 机器人没有执行交易？
-**A:** 可能的原因：
-1. **AHR999 指标不满足买入条件**：这是正常现象，机器人只在合适的时机买入
-2. **账户余额不足**：检查 OKX 账户 USDT 余额
-3. **API 权限不足**：确认 API 密钥有交易权限
-4. **市场时间**：某些时段可能无法交易
-
-### Q: 如何修改投资金额？
-**A:** 有三种方式调整每日基准投资金额（默认 $5）：
-
-1. **GitHub Actions（推荐）**：
-   - 进入仓库 **Settings** → **Secrets and variables** → **Actions**
-   - 点击 **New repository secret**
-   - Name：`BASELINE_INVESTMENT`
-   - Secret：输入金额数字（如 `10` 表示每日基准 $10）
-   - 保存后下次运行自动生效
-
-2. **本地运行**：
-   ```bash
-   # Windows PowerShell
-   $env:BASELINE_INVESTMENT = "10"
-   python trade_bot.py
-   
-   # macOS/Linux
-   export BASELINE_INVESTMENT="10"
-   python trade_bot.py
-   ```
-
-3. **修改代码（不推荐）**：
-   - 编辑 `trade_bot.py` 第 30 行的 `DEFAULT_BASELINE_INVESTMENT = 5.0`
-   - 改为你想要的金额
-   - 注意：代码修改会影响所有未来的更新
-
-> **💡 提示**：机器人会根据 AHR999 指标自动调整实际投资金额（0-4倍基准金额），这里设置的是基准值。
-
-### Q: 图表没有生成？
-**A:** 检查：
-1. **依赖安装**：确保 matplotlib、scipy 等依赖正确安装（`pip install -r requirements.txt`）
-2. **数据量不足**：至少需要 2 天以上的交易记录才能生成图表
-3. **权限问题**：确认有写入文件的权限
-4. **运行环境**：某些环境可能不支持图形界面（GitHub Actions 已配置为无头模式）
-
-### Q: 如何切换图表主题？
-**A:** 三种方式：
-1. **环境变量**（推荐）：设置 `DCA_CHART_THEME` 为 `light`、`midnight` 或 `neon`
-2. **GitHub Actions**：在仓库 Settings → Secrets 中添加 `DCA_CHART_THEME`
-3. **默认主题**：如不设置，默认使用 `light` 主题
-
-### Q: 如何停止自动化？
-**A:** 两种方法：
-1. **禁用工作流**：在 Actions 页面禁用 "Daily Investment Bot Runner"
-2. **删除 Secrets**：删除 OKX API 密钥（机器人会因认证失败而停止）
-
-### Q: 安全风险如何防范？
-**A:** 建议措施：
-1. **限制 API 权限**：只授予必要的交易权限
-2. **设置 IP 白名单**：限制 API 密钥的使用范围
-3. **小额测试**：先用小金额测试，确认无误后再增加投资
-4. **定期检查**：定期查看交易记录和账户状态
-
-### Q: Fork 后如何保护个人交易隐私？
-**A:** 如果你 Fork 了本仓库，建议采取以下措施保护交易隐私：
-1. **清空历史记录**：首次运行前，清空 `trade_log.csv` 内容（只保留表头 `date,buy_usd,buy_btc,price_usd`）
-2. **添加到 .gitignore**：将 `trade_log.csv` 和 `*.png` 添加到 `.gitignore` 文件，避免提交个人数据
-3. **使用私有仓库**：将 Fork 的仓库设为 Private，完全保护隐私
-
-> **💡 提示**：本仓库的 `trade_log.csv` 包含原作者的测试数据，建议 Fork 后立即清空。
-
-## 🛠️ 故障排除
-
-### 错误：`ModuleNotFoundError: No module named 'ccxt'`
-**解决方案**：重新安装依赖
+### 报错：`ModuleNotFoundError`
+说明依赖没装好，重新跑：
 ```bash
 pip install -r requirements.txt
 ```
 
-### 错误：`Authentication failed`
-**解决方案**：检查 API 密钥配置
-1. 确认密钥正确复制（无多余空格）
-2. 检查密钥是否过期
-3. 确认密钥权限设置正确
+### 报错：`Authentication failed`
+API密钥配置错了，检查：
+1. 密钥复制对了没（别有空格）
+2. Passphrase设对了没
+3. API密钥有没有过期
 
-### 错误：`Insufficient balance`
-**解决方案**：检查账户余额
-1. 登录 OKX 确认 USDT 余额充足
-2. 检查是否有未完成的订单占用资金
+### 报错：`Insufficient balance`
+USDT余额不够了，去OKX充值。
 
-### 错误：`GitHub API rate limit exceeded`
-**解决方案**：等待一段时间后重试，或检查 GitHub 令牌权限
-
-## 🤝 贡献指南
-1. Fork 仓库并新建分支（如 `feature/my-awesome-improvement`）
-2. 为新功能编写必要的文档或测试
-3. 运行静态检查或单元测试，确保通过
-4. 提交 Pull Request，说明变更动机与实现细节
-
-## 📄 许可证
-本项目采用 [MIT License](./LICENSE) 授权，细节请参阅许可证文本。
-
-## 📞 获取帮助
-- **提交 Issue**：遇到问题时，请在 GitHub 仓库提交 Issue
-- **查看文档**：仔细阅读本 README 和代码注释
-- **社区讨论**：欢迎在 Issues 中讨论策略改进和功能建议
+### Actions运行失败
+1. 进Actions页面，点失败的记录，看详细日志
+2. 通常是密钥配置问题
+3. 也可能是OKX API网络问题，过会儿再试
 
 ---
-**⚠️ 风险提示**：加密货币投资存在风险，请根据自身风险承受能力谨慎投资。本工具仅供学习和研究使用，不构成投资建议。
 
-欢迎提交 Issue 或 PR 与我们交流想法，祝你投资顺利！ 🚀
+## 风险提示
+
+**认真读一下**：
+
+1. **投资有风险**：比特币价格波动很大，可能亏钱，投资前想清楚
+2. **只投闲钱**：别拿生活费或借钱来玩，只投亏了也不影响生活的钱
+3. **不是理财建议**：这只是个开源工具，不保证赚钱，自己的决定自己负责
+4. **API安全**：妥善保管API密钥，定期更换，不要开提现权限
+5. **代码审查**：Fork之前可以看看代码，确保没有恶意操作
+6. **市场风险**：策略基于历史数据，不代表未来，市场变化可能导致策略失效
+
+---
+
+## 贡献与反馈
+
+欢迎提建议或报bug：
+1. 提Issue：https://github.com/xunyoyo/DCA-with-ahr999/issues
+2. 提PR：Fork后改代码，然后提Pull Request
+3. 讨论交流：在Issues里聊聊你的改进想法
+
+---
+
+## 开源协议
+
+MIT License - 随便用，随便改，但后果自负。
+
+---
+
+## 致谢
+
+- AHR999指标由[@ahr999](https://weibo.com/ahr999)发明
+- 感谢OKX提供API接口
+- 感谢GitHub提供免费的Actions服务
+
+祝定投顺利！记住：**投资需谨慎，闲钱慢慢投。**
