@@ -1,10 +1,28 @@
+# IDE/editor config
+.claude/
+.idea/
+.vscode/
+.github/prompts/
+openspec/
+
+AGENTS.md
+CLAUDE.md
+
 # Python virtual environment
 .venv/
 
 # Environment variables
 .env
 
-# Python cache
+# Python cache and build artifacts
 __pycache__/
 *.pyc
+*.egg-info/
+build/
+dist/
+
+# OS-specific files
 .DS_Store
+Desktop.ini
+Thumbs.db
+*~
