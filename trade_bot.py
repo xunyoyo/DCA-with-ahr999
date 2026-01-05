@@ -47,12 +47,38 @@ DAILY_CAP_X = 4.0
 PAUSE_THRESHOLD = 2.0
 NEUTRAL_X = 1.0
 LOG_FILE = "trade_log.csv"
-DEFAULT_CHART_THEME = "light"
+DEFAULT_CHART_THEME = "professional"
 
 # ==============================================================================
 # MODERN CHART THEMES (New section)
 # ==============================================================================
 CHART_THEMES = {
+    "professional": {
+        "label": "Professional",
+        "style": "seaborn-v0_8-whitegrid",
+        "palette": {
+            "roi": "#4F46E5",
+            "value": "#059669",
+            "cost": "#D97706",
+            "positive_fill": "#10B981",
+            "negative_fill": "#EF4444"
+        },
+        "rc": {
+            "font.family": "DejaVu Sans",
+            "axes.titlesize": 18,
+            "axes.labelsize": 13,
+            "axes.titlecolor": "#1E293B",
+            "axes.labelcolor": "#1E293B",
+            "axes.edgecolor": "#CBD5F5",
+            "xtick.color": "#334155",
+            "ytick.color": "#334155",
+            "grid.color": "#F1F5F9",
+            "legend.frameon": True
+        },
+        "figure_facecolor": "#FFFFFF",
+        "axes_facecolor": "#FFFFFF",
+        "legend_facecolor": "#FFFFFF"
+    },
     "light": {
         "label": "Snowy Minimal",
         "style": "seaborn-v0_8-whitegrid",
