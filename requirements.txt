@@ -1,7 +1,7 @@
 pandas
 numpy
 scipy
-ccxt
+ccxt>=4.4.100,<4.5.0
 requests
 python-dotenv
 matplotlib
