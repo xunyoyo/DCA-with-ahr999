@@ -11,10 +11,8 @@ This final version generates a full dashboard of charts:
 """
 
 import os
-import json
 import math
 import datetime as dt
-import contextlib
 import requests
 import pandas as pd
 import numpy as np
@@ -46,7 +44,9 @@ BETA = 0.8
 DAILY_CAP_X = 4.0
 PAUSE_THRESHOLD = 2.0
 NEUTRAL_X = 1.0
+MIN_TRADE_USD = 1.0
 LOG_FILE = "trade_log.csv"
+LOG_COLUMNS = ['date', 'buy_usd', 'buy_btc', 'price_usd']
 DEFAULT_CHART_THEME = "professional"
 
 # ==============================================================================
@@ -171,14 +171,12 @@ def _resolve_chart_theme(theme_key):
 # SECTION 2: HELPERS (Now includes multiple chart functions)
 # ==============================================================================
 def create_github_issue(title: str, body: str):
-    # (This function is perfect and remains unchanged)
     repo_slug=os.getenv("GITHUB_REPOSITORY"); token=os.getenv("GITHUB_TOKEN")
     if not repo_slug or not token: return
     url=f"https://api.github.com/repos/{repo_slug}/issues"
     headers={"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
-    payload={"title": title, "body": body}
     try:
-        response=requests.post(url, headers=headers, data=json.dumps(payload))
+        response=requests.post(url, headers=headers, json={"title": title, "body": body}, timeout=10)
         if response.status_code != 201: print(f"Failed to create GitHub issue: {response.status_code} {response.text}")
     except Exception as e: print(f"Error creating GitHub issue: {e}")
 
@@ -199,7 +197,7 @@ def _smooth_curve(x, y, num_points=500):
         # 将数值转回日期
         x_smooth = mdates.num2date(x_smooth_num)
         return x_smooth, y_smooth
-    except:
+    except Exception:
         return x, y
 
 def _plot_roi_curve(ax, df, palette):
@@ -279,10 +277,8 @@ def _plot_value_vs_cost(ax, df, palette):
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'${y:,.0f}'))
 
 def _plot_daily_investment(ax, df, palette):
-    # 计算投资倍数
-    baseline = df['buy_usd'].median()  # 使用中位数作为基准
-    df['investment_multiplier'] = df['buy_usd'] / baseline
-    
+    baseline = df['buy_usd'].median()
+
     # 平滑投资额曲线
     x_smooth, y_smooth = _smooth_curve(df['date'], df['buy_usd'])
     
@@ -396,6 +392,12 @@ def _plot_strategy_comparison(ax, df, palette):
     ax.set_ylabel("ROI (%)", fontsize=14)
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{y:.0f}%'))
 
+def _finalize_axis(ax, legend_face, fontsize=10, ncol=1):
+    ax.legend(facecolor=legend_face, framealpha=0.9, edgecolor='none', fontsize=fontsize, loc='best', ncol=ncol)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+    plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+
+
 def _style_axes(ax, theme_config: dict):
     axes_face = theme_config.get("axes_facecolor")
     if axes_face:
@@ -428,22 +430,13 @@ def generate_dashboard_charts(log_df: pd.DataFrame, theme_key=None):
         return
     
     try:
-        df = log_df.copy()
-        # 清理数据：去除空行和无效数据
-        df = df.dropna(subset=['date', 'price_usd'])
-        df = df[df['price_usd'] > 0]  # 确保价格数据有效
-        df = df.reset_index(drop=True)
-        
-        # 只保留有实际投资的数据用于图表生成
-        df_invested = df[df['buy_usd'] > 0].copy()
-        
-        if len(df_invested) < 1:
+        df = log_df.dropna(subset=['date', 'price_usd'])
+        df = df[(df['price_usd'] > 0) & (df['buy_usd'] > 0)].reset_index(drop=True).copy()
+
+        if df.empty:
             print("⚠️ No investment data yet. Charts will be generated after first trade.")
             return
-        
-        # Use invested data for chart generation
-        df = df_invested
-        
+
         df['date'] = pd.to_datetime(df['date'])
         df['invest_cum'] = df['buy_usd'].cumsum()
         df['hold_btc_cum'] = df['buy_btc'].cumsum()
@@ -470,10 +463,10 @@ def generate_dashboard_charts(log_df: pd.DataFrame, theme_key=None):
                 total_invested = df['invest_cum'].iloc[-1]
                 total_btc = df['hold_btc_cum'].iloc[-1]
                 current_value = df['value_usd'].iloc[-1]
-                avg_cost = total_invested / total_btc
+                avg_cost = total_invested / total_btc if total_btc > 0 else 0.0
                 current_price = df['price_usd'].iloc[-1]
                 total_profit = current_value - total_invested
-                roi_pct = (total_profit / total_invested) * 100
+                roi_pct = (total_profit / total_invested) * 100 if total_invested > 0 else 0.0
                 
                 # 计算普通定投对比
                 baseline = df['buy_usd'].median()
@@ -528,61 +521,20 @@ def generate_dashboard_charts(log_df: pd.DataFrame, theme_key=None):
                 # 创建子图 - 图表进一步下移
                 gs = fig.add_gridspec(4, 2, hspace=0.35, wspace=0.25, top=0.88, bottom=0.02, left=0.06, right=0.94)
                 
-                # 图1: ROI曲线
-                ax1 = fig.add_subplot(gs[0, 0])
-                _style_axes(ax1, theme_config)
-                _plot_roi_curve(ax1, df, palette)
-                ax1.legend(facecolor=legend_face, framealpha=0.9, edgecolor='none', fontsize=10, loc='best')
-                ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-                plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45, ha='right')
-                
-                # 图2: 权益曲线
-                ax2 = fig.add_subplot(gs[0, 1])
-                _style_axes(ax2, theme_config)
-                _plot_equity_curve(ax2, df, palette)
-                ax2.legend(facecolor=legend_face, framealpha=0.9, edgecolor='none', fontsize=10, loc='best')
-                ax2.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-                plt.setp(ax2.xaxis.get_majorticklabels(), rotation=45, ha='right')
-                
-                # 图3: 价值vs成本
-                ax3 = fig.add_subplot(gs[1, 0])
-                _style_axes(ax3, theme_config)
-                _plot_value_vs_cost(ax3, df, palette)
-                ax3.legend(facecolor=legend_face, framealpha=0.9, edgecolor='none', fontsize=10, loc='best')
-                ax3.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-                plt.setp(ax3.xaxis.get_majorticklabels(), rotation=45, ha='right')
-                
-                # 图4: 每日投资额
-                ax4 = fig.add_subplot(gs[1, 1])
-                _style_axes(ax4, theme_config)
-                _plot_daily_investment(ax4, df, palette)
-                ax4.legend(facecolor=legend_face, framealpha=0.9, edgecolor='none', fontsize=10, loc='best')
-                ax4.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-                plt.setp(ax4.xaxis.get_majorticklabels(), rotation=45, ha='right')
-                
-                # 图5: BTC累积
-                ax5 = fig.add_subplot(gs[2, 0])
-                _style_axes(ax5, theme_config)
-                _plot_btc_accumulation(ax5, df, palette)
-                ax5.legend(facecolor=legend_face, framealpha=0.9, edgecolor='none', fontsize=10, loc='best')
-                ax5.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-                plt.setp(ax5.xaxis.get_majorticklabels(), rotation=45, ha='right')
-                
-                # 图6: 平均成本vs价格
-                ax6 = fig.add_subplot(gs[2, 1])
-                _style_axes(ax6, theme_config)
-                _plot_avg_cost_vs_price(ax6, df, palette)
-                ax6.legend(facecolor=legend_face, framealpha=0.9, edgecolor='none', fontsize=10, loc='best')
-                ax6.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-                plt.setp(ax6.xaxis.get_majorticklabels(), rotation=45, ha='right')
-                
-                # 图7: 策略对比（跨两列）
-                ax7 = fig.add_subplot(gs[3, :])
-                _style_axes(ax7, theme_config)
-                _plot_strategy_comparison(ax7, df, palette)
-                ax7.legend(facecolor=legend_face, framealpha=0.9, edgecolor='none', fontsize=11, loc='best', ncol=2)
-                ax7.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-                plt.setp(ax7.xaxis.get_majorticklabels(), rotation=45, ha='right')
+                panels = [
+                    (gs[0, 0], _plot_roi_curve, {}),
+                    (gs[0, 1], _plot_equity_curve, {}),
+                    (gs[1, 0], _plot_value_vs_cost, {}),
+                    (gs[1, 1], _plot_daily_investment, {}),
+                    (gs[2, 0], _plot_btc_accumulation, {}),
+                    (gs[2, 1], _plot_avg_cost_vs_price, {}),
+                    (gs[3, :], _plot_strategy_comparison, {"fontsize": 11, "ncol": 2}),
+                ]
+                for spec, plot_fn, finalize_kwargs in panels:
+                    ax = fig.add_subplot(spec)
+                    _style_axes(ax, theme_config)
+                    plot_fn(ax, df, palette)
+                    _finalize_axis(ax, legend_face, **finalize_kwargs)
                 
                 # 保存综合仪表盘
                 output_dashboard = "dashboard_comprehensive.png"
@@ -595,7 +547,6 @@ def generate_dashboard_charts(log_df: pd.DataFrame, theme_key=None):
 
 
 def calculate_portfolio_summary(log_df: pd.DataFrame, current_price: float) -> str:
-    # (This function is perfect and remains unchanged)
     if log_df is None or log_df.empty: return "### 📊 Portfolio Summary\n- No trading history found yet."
     try:
         total_invested_usd=log_df['buy_usd'].sum(); total_holdings_btc=log_df['buy_btc'].sum()
@@ -610,9 +561,8 @@ def calculate_portfolio_summary(log_df: pd.DataFrame, current_price: float) -> s
     except Exception as e: return f"### 📊 Portfolio Summary\n- Error calculating summary: {e}"
 
 # ==============================================================================
-# SECTION 3: CORE LOGIC (Unchanged, it is robust)
+# SECTION 3: CORE LOGIC
 # ==============================================================================
-# (This entire section is correct and remains unchanged)
 def index_growth_estimate(age_days: int) -> float:
     age_days=max(1, age_days); return 10**(5.84*math.log10(age_days)-17.01)
 def calculate_continuous_multiplier(x: float) -> float:
@@ -641,7 +591,8 @@ def _harmonic_mean(values: np.ndarray) -> float:
 
 def get_today_investment_amount(historical_df: pd.DataFrame, baseline: float) -> dict:
     prices=historical_df["price"].astype(float)
-    dca200=prices.rolling(window=200, min_periods=200).apply(_harmonic_mean, raw=True).iloc[-1]
+    last_window=prices.tail(200)
+    dca200=_harmonic_mean(last_window.to_numpy()) if len(last_window) >= 200 else np.nan
     age_today=(dt.date.today()-GENESIS).days; estimate_today=index_growth_estimate(age_today)
     price_today=prices.iloc[-1]
     if not np.isfinite(dca200) or not np.isfinite(price_today): return {"investment_usd": np.nan, "price_today": price_today, "ahr999_index": np.nan}
@@ -664,6 +615,7 @@ def main():
     execution_log = ""
     investment_data = {}
     price_now = None
+    log_df = None
 
     try:
         api_key=os.getenv("OKX_API_KEY"); secret_key=os.getenv("OKX_SECRET_KEY"); password=os.getenv("OKX_PASSWORD")
@@ -678,7 +630,7 @@ def main():
         investment_data=get_today_investment_amount(historical_df, BASELINE_INVESTMENT)
         investment_amount=investment_data["investment_usd"]; price_now=investment_data["price_today"]
 
-        if investment_amount is not None and math.isfinite(investment_amount) and investment_amount > 1:
+        if investment_amount is not None and math.isfinite(investment_amount) and investment_amount > MIN_TRADE_USD:
             print(f"Placing market buy order to SPEND ${investment_amount}...")
             order = exchange.create_market_buy_order_with_cost(OKX_SYMBOL, investment_amount)
             
@@ -691,42 +643,35 @@ def main():
             final_issue_title = f"✅ Trade Successful: Spent ${new_log_entry['buy_usd']:.2f} on {OKX_SYMBOL}"
             execution_log = f"### 📈 Trade Execution\n- **Status:** `SUCCESS`\n- **Order ID:** `{order.get('id', 'N/A')}`"
         else:
-            # Even if trade is skipped, log today's price for chart generation
             new_log_entry = {'date': dt.date.today().isoformat(), 'buy_usd': 0.0, 'buy_btc': 0.0, 'price_usd': price_now}
             final_issue_title = f"🟡 Trade Skipped: Amount was `{investment_amount}`"
-            execution_log = f"### 📈 Trade Execution\n- **Status:** `SKIPPED`"
+            execution_log = "### 📈 Trade Execution\n- **Status:** `SKIPPED`"
             print("Investment amount invalid or too small, skipping trade.")
-        
-        # Always update log file (defensive: create if not exists)
+
         try:
-            log_df = pd.read_csv(LOG_FILE) if os.path.exists(LOG_FILE) and os.path.getsize(LOG_FILE) > 0 else pd.DataFrame(columns=['date', 'buy_usd', 'buy_btc', 'price_usd'])
-            log_df = pd.concat([log_df, pd.DataFrame([new_log_entry])], ignore_index=True)
-            log_df.to_csv(LOG_FILE, index=False)
-            print(f"✅ Appended to {LOG_FILE}: {new_log_entry}")
-        except Exception as e: 
-            print(f"⚠️ Error updating CSV log: {e}")
-            # Create new file if error occurs
-            pd.DataFrame([new_log_entry]).to_csv(LOG_FILE, index=False)
+            existing = pd.read_csv(LOG_FILE)
+        except (FileNotFoundError, pd.errors.EmptyDataError):
+            existing = pd.DataFrame(columns=LOG_COLUMNS)
+        log_df = pd.concat([existing, pd.DataFrame([new_log_entry])], ignore_index=True)
+        log_df.to_csv(LOG_FILE, index=False)
+        print(f"✅ Appended to {LOG_FILE}: {new_log_entry}")
 
     except Exception as e:
-        final_issue_title = f"🔴 TRADE FAILED"
+        final_issue_title = "🔴 TRADE FAILED"
         execution_log = f"### 📈 Trade Execution\n- **Status:** `FAILED`\n\nAn error occurred: \n```\n{e}\n```"
         print(f"🔴🔴🔴 An error occurred: {e} 🔴🔴🔴")
-    
+
     finally:
-        # Defensive: Always try to load log file, create empty DataFrame if fails
+        if log_df is None:
+            try:
+                log_df = pd.read_csv(LOG_FILE)
+            except (FileNotFoundError, pd.errors.EmptyDataError):
+                log_df = None
         final_log_df = None
-        try:
-            if os.path.exists(LOG_FILE) and os.path.getsize(LOG_FILE) > 0:
-                final_log_df = pd.read_csv(LOG_FILE)
-                # 清理数据：去除空行和无效数据
-                final_log_df = final_log_df.dropna(subset=['date'])
-                final_log_df = final_log_df[final_log_df['price_usd'] > 0]  # Keep entries with valid price
-                final_log_df = final_log_df.reset_index(drop=True)
-        except Exception as e:
-            print(f"⚠️ Error loading log file: {e}")
-            final_log_df = None
-            
+        if log_df is not None:
+            final_log_df = log_df.dropna(subset=['date'])
+            final_log_df = final_log_df[final_log_df['price_usd'] > 0].reset_index(drop=True)
+
         if price_now and math.isfinite(price_now) and final_log_df is not None and len(final_log_df) > 0:
             portfolio_summary_log = calculate_portfolio_summary(final_log_df, price_now)
             try:
