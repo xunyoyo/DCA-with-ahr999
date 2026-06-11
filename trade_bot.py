@@ -590,11 +590,23 @@ def _harmonic_mean(values: np.ndarray) -> float:
 
 
 def get_today_investment_amount(historical_df: pd.DataFrame, baseline: float) -> dict:
-    prices=historical_df["price"].astype(float)
-    last_window=prices.tail(200)
-    dca200=_harmonic_mean(last_window.to_numpy()) if len(last_window) >= 200 else np.nan
+    if "price" not in historical_df.columns:
+        print("⚠️ historical_df missing 'price' column.")
+        return {"investment_usd": np.nan, "price_today": np.nan, "ahr999_index": np.nan}
+
+    prices=pd.to_numeric(historical_df["price"], errors="coerce")
+    valid_prices=prices.dropna()
+    if valid_prices.empty:
+        print("⚠️ No valid numeric price data after coercion.")
+        return {"investment_usd": np.nan, "price_today": np.nan, "ahr999_index": np.nan}
+
+    last_window=valid_prices.tail(200)
+    if len(last_window) < 200:
+        print(f"⚠️ Insufficient valid numeric price points for 200-day window: {len(last_window)}")
+        return {"investment_usd": np.nan, "price_today": valid_prices.iloc[-1], "ahr999_index": np.nan}
+    dca200=_harmonic_mean(last_window.to_numpy())
     age_today=(dt.date.today()-GENESIS).days; estimate_today=index_growth_estimate(age_today)
-    price_today=prices.iloc[-1]
+    price_today=valid_prices.iloc[-1]
     if not np.isfinite(dca200) or not np.isfinite(price_today): return {"investment_usd": np.nan, "price_today": price_today, "ahr999_index": np.nan}
     ahr999_today=(price_today/dca200)*(price_today/estimate_today)
     buy_usd_ahr=baseline
@@ -623,6 +635,16 @@ def main():
         exchange=ccxt.okx({'apiKey': api_key, 'secret': secret_key, 'password': password, 'options': {'defaultType': 'spot'}})
         print("Fetching historical data...")
         ohlcv=exchange.fetch_ohlcv(OKX_SYMBOL, '1d', limit=250)
+        if not isinstance(ohlcv, list):
+            sample=ohlcv if isinstance(ohlcv, (dict, str, bytes, int, float, type(None))) else repr(ohlcv)[:400]
+            print(f"⚠️ Unexpected OHLCV payload type from fetch_ohlcv: {type(ohlcv)}")
+            print(f"⚠️ OHLCV payload sample: {sample}")
+            raise ValueError(f"fetch_ohlcv returned unexpected payload type {type(ohlcv)} with sample {sample}")
+        malformed_rows=[row for row in ohlcv if not (hasattr(row, "__len__") and len(row) >= 6)]
+        if malformed_rows:
+            sample=ohlcv[:5]
+            print(f"⚠️ Unexpected OHLCV rows sample (first 5): {sample}")
+            raise ValueError(f"fetch_ohlcv returned malformed OHLCV rows (first 5): {sample}")
         if len(ohlcv)<200: raise ValueError(f"Not enough historical data. Got {len(ohlcv)}.")
         historical_df=pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         historical_df['price']=historical_df['close']
