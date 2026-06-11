@@ -12,6 +12,7 @@ This final version generates a full dashboard of charts:
 
 import os
 import math
+import time
 import datetime as dt
 import requests
 import pandas as pd
@@ -561,6 +562,100 @@ def calculate_portfolio_summary(log_df: pd.DataFrame, current_price: float) -> s
     except Exception as e: return f"### 📊 Portfolio Summary\n- Error calculating summary: {e}"
 
 # ==============================================================================
+# SECTION 2.5: RESILIENT MARKET DATA FETCHING
+# ==============================================================================
+# ``ccxt.fetch_ohlcv`` (and order placement) implicitly call ``load_markets()``,
+# which sorts the markets/currencies dictionaries. When OKX's live feed
+# momentarily contains an instrument/currency that ccxt parses with a missing
+# symbol/code, that dict gains a ``None`` key and Python's ``sorted()`` raises
+# ``'<' not supported between instances of 'NoneType' and 'str'`` — crashing the
+# whole run before any price is even read. We can't fix ccxt internals or the
+# exchange feed, so we (1) retry, and (2) fall back to OKX's public candles REST
+# endpoint, which needs no market metadata at all.
+OKX_PUBLIC_CANDLES_URL = "https://www.okx.com/api/v5/market/candles"
+
+
+def _okx_public_candles(symbol: str, limit: int = 250, bar: str = "1Dutc") -> list:
+    """Fetch OHLCV candles directly from OKX's public REST API.
+
+    Returns rows as ``[ts, open, high, low, close, volume]`` sorted oldest-first,
+    matching the contract of ``ccxt.fetch_ohlcv`` so the rest of the pipeline is
+    unchanged. Rows that cannot be parsed into numbers are skipped rather than
+    poisoning the dataset.
+    """
+    inst_id = symbol.replace("/", "-")
+    params = {"instId": inst_id, "bar": bar, "limit": str(limit)}
+    response = requests.get(OKX_PUBLIC_CANDLES_URL, params=params, timeout=20)
+    response.raise_for_status()
+    payload = response.json()
+    if str(payload.get("code")) != "0":
+        raise ValueError(f"OKX candles API error: code={payload.get('code')} msg={payload.get('msg')}")
+    raw = payload.get("data") or []
+    rows = []
+    for item in raw:
+        if not (hasattr(item, "__len__") and len(item) >= 6):
+            continue
+        try:
+            rows.append([
+                int(item[0]),
+                float(item[1]), float(item[2]), float(item[3]), float(item[4]),
+                float(item[5]),
+            ])
+        except (TypeError, ValueError):
+            continue
+    rows.sort(key=lambda r: r[0])  # OKX returns newest-first; ccxt yields oldest-first
+    return rows
+
+
+def fetch_ohlcv_resilient(exchange, symbol: str, timeframe: str = "1d", limit: int = 250, retries: int = 3) -> list:
+    """Fetch OHLCV via ccxt, retrying then falling back to OKX's public REST API.
+
+    Any ccxt failure — including the ``None``-vs-``str`` ``TypeError`` raised by
+    ``load_markets()`` when the exchange feed has a malformed entry — triggers a
+    short retry loop and, ultimately, a direct public-API fetch so a transient
+    metadata glitch never blocks the daily price read.
+    """
+    last_error = None
+    for attempt in range(retries):
+        try:
+            data = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+            if isinstance(data, list) and len(data) >= 200:
+                return data
+            last_error = ValueError(
+                f"fetch_ohlcv returned {len(data) if isinstance(data, list) else type(data)} rows"
+            )
+            print(f"⚠️ ccxt fetch_ohlcv attempt {attempt + 1}/{retries} returned insufficient data: {last_error}")
+        except Exception as e:  # noqa: BLE001 - includes the None<str TypeError from load_markets()
+            last_error = e
+            print(f"⚠️ ccxt fetch_ohlcv attempt {attempt + 1}/{retries} failed: {e}")
+        if attempt < retries - 1:
+            time.sleep(2 ** attempt)
+    print(f"⚠️ Falling back to OKX public candles API after ccxt failures (last error: {last_error}).")
+    bar = "1Dutc" if timeframe == "1d" else timeframe
+    return _okx_public_candles(symbol, limit=limit, bar=bar)
+
+
+def ensure_markets_loaded(exchange, retries: int = 3) -> None:
+    """Load ccxt markets with retries, forcing a fresh reload after the first try.
+
+    Order placement requires ccxt market metadata. Because the ``None``-key sort
+    failure in ``load_markets()`` is driven by transient exchange data, reloading
+    a moment later usually succeeds; we surface the error only if it persists.
+    """
+    last_error = None
+    for attempt in range(retries):
+        try:
+            exchange.load_markets(reload=(attempt > 0))
+            return
+        except Exception as e:  # noqa: BLE001
+            last_error = e
+            print(f"⚠️ load_markets attempt {attempt + 1}/{retries} failed: {e}")
+            if attempt < retries - 1:
+                time.sleep(2 ** attempt)
+    raise last_error
+
+
+# ==============================================================================
 # SECTION 3: CORE LOGIC
 # ==============================================================================
 def index_growth_estimate(age_days: int) -> float:
@@ -634,7 +729,7 @@ def main():
         if not all([api_key, secret_key, password]): raise ValueError("API credentials not found.")
         exchange=ccxt.okx({'apiKey': api_key, 'secret': secret_key, 'password': password, 'options': {'defaultType': 'spot'}})
         print("Fetching historical data...")
-        ohlcv=exchange.fetch_ohlcv(OKX_SYMBOL, '1d', limit=250)
+        ohlcv=fetch_ohlcv_resilient(exchange, OKX_SYMBOL, '1d', limit=250)
         if not isinstance(ohlcv, list):
             sample=ohlcv if isinstance(ohlcv, (dict, str, bytes, int, float, type(None))) else repr(ohlcv)[:400]
             print(f"⚠️ Unexpected OHLCV payload type from fetch_ohlcv: {type(ohlcv)}")
@@ -654,6 +749,7 @@ def main():
 
         if investment_amount is not None and math.isfinite(investment_amount) and investment_amount > MIN_TRADE_USD:
             print(f"Placing market buy order to SPEND ${investment_amount}...")
+            ensure_markets_loaded(exchange)
             order = exchange.create_market_buy_order_with_cost(OKX_SYMBOL, investment_amount)
             
             final_cost = order.get('cost', 0) or investment_amount
