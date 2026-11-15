@@ -425,20 +425,38 @@ def _style_axes(ax, theme_config: dict):
             alpha=0.15, ha='center', va='center', rotation=30, zorder=0)
 
 
+def _aggregate_dashboard_data(log_df: pd.DataFrame) -> pd.DataFrame:
+    """按自然日聚合交易记录，避免同日多笔交易产生重复横坐标。"""
+    df = log_df.copy()
+    df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.normalize()
+    for column in ('buy_usd', 'buy_btc', 'price_usd'):
+        df[column] = pd.to_numeric(df[column], errors='coerce')
+
+    df = df.dropna(subset=['date', 'buy_usd', 'buy_btc', 'price_usd'])
+    df = df[(df['price_usd'] > 0) & (df['buy_usd'] > 0) & (df['buy_btc'] > 0)]
+    if df.empty:
+        return df.reset_index(drop=True)
+
+    daily = (
+        df.groupby('date', as_index=False, sort=True)[['buy_usd', 'buy_btc']]
+        .sum()
+    )
+    daily['price_usd'] = daily['buy_usd'] / daily['buy_btc']
+    return daily.reset_index(drop=True)
+
+
 def generate_dashboard_charts(log_df: pd.DataFrame, theme_key=None):
     if log_df is None or len(log_df) == 0:
         print("⚠️ No data to generate charts.")
         return
     
     try:
-        df = log_df.dropna(subset=['date', 'price_usd'])
-        df = df[(df['price_usd'] > 0) & (df['buy_usd'] > 0)].reset_index(drop=True).copy()
+        df = _aggregate_dashboard_data(log_df)
 
         if df.empty:
             print("⚠️ No investment data yet. Charts will be generated after first trade.")
             return
 
-        df['date'] = pd.to_datetime(df['date'])
         df['invest_cum'] = df['buy_usd'].cumsum()
         df['hold_btc_cum'] = df['buy_btc'].cumsum()
         df['value_usd'] = df['hold_btc_cum'] * df['price_usd']
@@ -491,7 +509,7 @@ def generate_dashboard_charts(log_df: pd.DataFrame, theme_key=None):
                 col1_x = 0.12
                 fig.text(col1_x, stats_y - 0.012, 'Investment:', fontsize=13, fontweight='bold', color=palette['roi'], ha='center')
                 fig.text(col1_x, stats_y - 0.025, f'${total_invested:,.2f}', fontsize=11, ha='center')
-                fig.text(col1_x, stats_y - 0.036, f'{len(df)} days', fontsize=10, alpha=0.8, ha='center')
+                fig.text(col1_x, stats_y - 0.036, f'{df["date"].nunique()} days', fontsize=10, alpha=0.8, ha='center')
                 
                 col2_x = 0.28
                 fig.text(col2_x, stats_y - 0.012, 'Holdings:', fontsize=13, fontweight='bold', color=palette['roi'], ha='center')
