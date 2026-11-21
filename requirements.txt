@@ -1,6 +1,5 @@
 pandas
 numpy
-scipy
 ccxt>=4.4.100,<4.5.0
 requests
 python-dotenv

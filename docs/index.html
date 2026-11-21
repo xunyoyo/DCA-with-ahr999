@@ -1,0 +1,851 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DCA Investment Dashboard · AHR999</title>
+<style>
+  :root {
+    --page: #F5F6F8;
+    --surface: #FFFFFF;
+    --border: #E6E8EC;
+    --ink: #0F172A;
+    --ink-2: #475569;
+    --muted: #64748B;
+    --axis: #CBD5E1;
+    --grid: #EEF1F5;
+    --blue: #2a78d6;
+    --orange: #eb6834;
+    --aqua: #1baf7a;
+    --gain: #0F8A5A;
+    --loss: #D03B3B;
+    --radius: 12px;
+    color-scheme: light;
+  }
+  html[data-theme="dark"] {
+    --page: #0B1120;
+    --surface: #111827;
+    --border: #1F2937;
+    --ink: #F1F5F9;
+    --ink-2: #CBD5E1;
+    --muted: #94A3B8;
+    --axis: #334155;
+    --grid: #1B2432;
+    --blue: #3987e5;
+    --orange: #d95926;
+    --aqua: #199e70;
+    --gain: #34D399;
+    --loss: #E66767;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1180px; margin: 0 auto; padding: 40px 24px 56px; }
+
+  header.top { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 22px; }
+  h1 { font-size: 24px; font-weight: 650; letter-spacing: -0.015em; margin: 0 0 6px; }
+  .subtitle { color: var(--muted); font-size: 13px; margin: 0; }
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+  .segmented { display: flex; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 3px; }
+  .segmented button {
+    border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 12.5px;
+    padding: 5px 12px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+  }
+  .segmented button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+  .icon-btn {
+    width: 34px; height: 34px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--ink-2); cursor: pointer; font-size: 15px; line-height: 1;
+  }
+
+  .tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
+  .tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px 15px; }
+  .tile .label { color: var(--muted); font-size: 11.5px; font-weight: 500; letter-spacing: 0.02em; text-transform: uppercase; }
+  .tile .value { font-size: 22px; font-weight: 650; letter-spacing: -0.02em; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .tile .note { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .up { color: var(--gain); }
+  .down { color: var(--loss); }
+
+  .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px 10px; min-width: 0; }
+  .card.wide { grid-column: 1 / -1; }
+  .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .card-head h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  .kicker { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+  .kicker.strong { font-weight: 600; }
+  .card-sub { color: var(--muted); font-size: 12px; margin: 2px 0 6px; }
+  .chart { width: 100%; height: 258px; }
+  .chart.tall { height: 300px; }
+
+  details.table-view { margin-top: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 18px; }
+  details.table-view summary { cursor: pointer; font-size: 13px; color: var(--ink-2); font-weight: 500; }
+  .table-scroll { max-height: 420px; overflow: auto; margin-top: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 6px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { position: sticky; top: 0; background: var(--surface); color: var(--muted); font-weight: 500; }
+
+  footer { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 22px; }
+  footer a { color: var(--muted); }
+  .error { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; color: var(--ink-2); }
+
+  @media (max-width: 900px) {
+    .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cards { grid-template-columns: minmax(0, 1fr); }
+    header.top { flex-direction: column; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="top">
+    <div>
+      <h1>DCA Investment Dashboard</h1>
+      <p class="subtitle" id="subtitle">AHR999 adaptive strategy</p>
+    </div>
+    <div class="toolbar">
+      <div class="segmented" id="range-buttons" role="group" aria-label="Time range">
+        <button type="button" data-days="0" aria-pressed="true">All</button>
+        <button type="button" data-days="365" aria-pressed="false">1Y</button>
+        <button type="button" data-days="180" aria-pressed="false">6M</button>
+        <button type="button" data-days="90" aria-pressed="false">3M</button>
+      </div>
+      <button class="icon-btn" id="theme-toggle" type="button" aria-label="Toggle colour theme" title="Toggle colour theme">◐</button>
+    </div>
+  </header>
+
+  <div id="root">
+    <section class="tiles" id="tiles" aria-label="Portfolio summary"></section>
+    <section class="cards" id="cards"></section>
+    <details class="table-view">
+      <summary>Table view — every daily value</summary>
+      <div class="table-scroll"><table id="data-table">
+        <thead><tr><th>Date</th><th>Invested</th><th>Holdings (BTC)</th><th>BTC price</th><th>Value</th><th>ROI</th><th>Buys</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </details>
+  </div>
+
+  <footer>
+    <span>AHR999 adaptive DCA · data from <code>trade_log.csv</code></span>
+    <span><a href="https://github.com/xunyoyo/DCA-with-ahr999">github.com/xunyoyo</a></span>
+  </footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  function tokens() {
+    var css = getComputedStyle(document.documentElement);
+    function v(name) { return css.getPropertyValue(name).trim(); }
+    return {
+      page: v('--page'), surface: v('--surface'), border: v('--border'),
+      ink: v('--ink'), ink2: v('--ink-2'), muted: v('--muted'),
+      axis: v('--axis'), grid: v('--grid'),
+      blue: v('--blue'), orange: v('--orange'), aqua: v('--aqua'),
+      gain: v('--gain'), loss: v('--loss'),
+      gainFill: 'color-mix(in srgb, ' + v('--aqua') + ' 13%, transparent)',
+      lossFill: 'color-mix(in srgb, ' + v('--loss') + ' 11%, transparent)',
+      blueFill: 'color-mix(in srgb, ' + v('--blue') + ' 11%, transparent)'
+    };
+  }
+
+  // ---------- formatting -------------------------------------------------
+  function compact(value) {
+    var abs = Math.abs(value);
+    if (abs >= 1e6) return (value / 1e6).toFixed(abs >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M';
+    if (abs >= 1e3) return (value / 1e3).toFixed(abs >= 1e4 ? 0 : 1).replace(/\.0$/, '') + 'K';
+    return String(Math.round(value));
+  }
+  function money(value, digits) {
+    if (value == null || !isFinite(value)) return '—';
+    var abs = Math.abs(value);
+    if (digits != null) return '$' + value.toFixed(digits);
+    if (abs >= 1000) return '$' + Math.round(value).toLocaleString('en-US');
+    if (abs >= 100) return '$' + value.toFixed(0);
+    return '$' + value.toFixed(2);
+  }
+  function signedMoney(value) {
+    return (value >= 0 ? '+' : '−') + money(Math.abs(value));
+  }
+  function pct(value, digits) {
+    if (value == null || !isFinite(value)) return '—';
+    return (value >= 0 ? '+' : '−') + Math.abs(value).toFixed(digits == null ? 1 : digits) + '%';
+  }
+  function axisMoney(value) {
+    var abs = Math.abs(value);
+    if (abs >= 1000) return '$' + compact(value);
+    if (abs >= 100) return '$' + Math.round(value);
+    return '$' + (Math.round(value * 10) / 10);
+  }
+  function btc(value) { return value.toFixed(5); }
+  function shortDate(iso) { return MONTHS[Number(iso.slice(5, 7)) - 1] + " '" + iso.slice(2, 4); }
+  function prettyDate(iso) {
+    return MONTHS[Number(iso.slice(5, 7)) - 1] + ' ' + Number(iso.slice(8, 10)) + ', ' + iso.slice(0, 4);
+  }
+
+  // ---------- data --------------------------------------------------------
+  function parseCsv(text) {
+    var lines = text.split(/\r?\n/);
+    var rows = [];
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (!line || i === 0) continue;
+      var parts = line.split(',');
+      var date = parts[0];
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+      var usd = Number(parts[1]), coin = Number(parts[2]), price = Number(parts[3]);
+      if (!isFinite(usd) || !isFinite(coin) || !isFinite(price) || price <= 0) continue;
+      rows.push({ date: date, usd: usd, btc: coin, price: price });
+    }
+    return rows;
+  }
+
+  function addDays(iso, n) {
+    var d = new Date(iso + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function buildDaily(rows) {
+    var map = new Map();
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      var e = map.get(r.date);
+      if (!e) { e = { date: r.date, usd: 0, btc: 0, price: r.price, trades: 0 }; map.set(r.date, e); }
+      e.usd += r.usd;
+      e.btc += r.btc;
+      e.price = r.price;
+      if (r.usd > 0) e.trades += 1;
+    }
+    var keys = Array.from(map.keys()).sort();
+    if (!keys.length) return [];
+    var days = [];
+    var lastPrice = null;
+    for (var d = keys[0]; d <= keys[keys.length - 1]; d = addDays(d, 1)) {
+      var hit = map.get(d);
+      var price = hit ? hit.price : lastPrice;
+      lastPrice = price;
+      days.push({ date: d, usd: hit ? hit.usd : 0, btc: hit ? hit.btc : 0, price: price, trades: hit ? hit.trades : 0 });
+    }
+
+    var invested = 0, coins = 0;
+    for (var j = 0; j < days.length; j++) {
+      var row = days[j];
+      invested += row.usd;
+      coins += row.btc;
+      row.invested = invested;
+      row.coins = coins;
+      row.value = coins * row.price;
+      row.roi = invested > 0 ? (row.value / invested - 1) * 100 : 0;
+      row.avgCost = coins > 0 ? invested / coins : null;
+    }
+
+    var positive = days.filter(function (r) { return r.usd > 0; }).map(function (r) { return r.usd; }).sort(function (a, b) { return a - b; });
+    var baseline = positive.length ? positive[Math.floor(positive.length / 2)] : 0;
+    var regCost = 0, regCoins = 0;
+    for (var k = 0; k < days.length; k++) {
+      regCost += baseline;
+      regCoins += baseline / days[k].price;
+      days[k].regRoi = (regCoins * days[k].price / regCost - 1) * 100;
+    }
+    return { days: days, baseline: baseline, regularCost: regCost, regularCoins: regCoins };
+  }
+
+  function median(values) {
+    var sorted = values.slice().sort(function (a, b) { return a - b; });
+    return sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
+  }
+
+  function stats(days) {
+    var last = days[days.length - 1];
+    var invested = last.invested, coins = last.coins, value = last.value, price = last.price;
+    var gain = value - invested;
+    var roi = invested > 0 ? (gain / invested) * 100 : 0;
+    var positive = days.filter(function (r) { return r.usd > 0; }).map(function (r) { return r.usd; });
+    var baseline = median(positive);
+    var regCoins = 0, regCost = 0;
+    for (var i = 0; i < days.length; i++) { regCoins += baseline / days[i].price; regCost += baseline; }
+    var regValue = regCoins * price;
+    var regRoi = regCost > 0 ? (regValue / regCost - 1) * 100 : 0;
+    return {
+      invested: invested, coins: coins, value: value, price: price,
+      gain: gain, roi: roi, avgCost: coins > 0 ? invested / coins : 0,
+      regRoi: regRoi, advantage: roi - regRoi, gainAdvantage: gain - (regValue - regCost),
+      buyDays: days.filter(function (r) { return r.trades > 0; }).length,
+      span: days.length, baseline: baseline
+    };
+  }
+
+  // ---------- shared echarts pieces --------------------------------------
+  function axisCommon(t, tz) {
+    return {
+      axisLine: { show: true, lineStyle: { color: t.axis, width: 1 } },
+      axisTick: { show: false },
+      axisLabel: { color: t.muted, fontSize: 11.5, margin: 10, hideOverlap: true },
+      splitLine: { show: false }
+    };
+  }
+
+  function yAxisCommon(t, formatter) {
+    return {
+      type: 'value',
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: t.muted, fontSize: 11.5, margin: 10, formatter: formatter },
+      splitLine: { show: true, lineStyle: { color: t.grid, width: 1 } }
+    };
+  }
+
+  function gridCommon(extra) {
+    var g = { left: 6, right: 14, top: 18, bottom: 6, containLabel: true };
+    for (var k in extra) g[k] = extra[k];
+    return g;
+  }
+
+  function tooltipCommon(t) {
+    return {
+      trigger: 'axis',
+      axisPointer: { type: 'line', lineStyle: { color: t.axis, width: 1 }, snap: true },
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: 1,
+      padding: [8, 12],
+      textStyle: { color: t.ink, fontSize: 12 },
+      extraCssText: 'border-radius:8px;box-shadow:0 6px 20px rgba(15,23,42,0.10);'
+    };
+  }
+
+  function tooltipRows(title, rows) {
+    var html = '<div style="color:#64748B;font-size:11px;margin-bottom:5px">' + title + '</div>';
+    for (var i = 0; i < rows.length; i++) {
+      html += '<div style="display:flex;gap:10px;align-items:center;justify-content:space-between;line-height:1.7">'
+        + '<span style="display:inline-flex;align-items:center;gap:6px;color:#64748B">'
+        + '<i style="display:inline-block;width:10px;height:2px;border-radius:2px;background:' + rows[i].color + '"></i>'
+        + rows[i].name + '</span>'
+        + '<b style="font-variant-numeric:tabular-nums">' + rows[i].value + '</b></div>';
+    }
+    return html;
+  }
+
+  function lineSeries(t, name, color, data, filled) {
+    var s = {
+      name: name, type: 'line', data: data, showSymbol: false, symbol: 'circle', symbolSize: 8,
+      lineStyle: { width: 2, color: color, cap: 'round', join: 'round' },
+      itemStyle: { color: color },
+      emphasis: { focus: 'series' },
+      animationDuration: 420
+    };
+    if (filled) s.areaStyle = { color: color, opacity: 0.10 };
+    return s;
+  }
+
+  function zeroLine(t) {
+    return {
+      silent: true, symbol: 'none', animation: false,
+      lineStyle: { color: t.axis, width: 1, type: [3, 3] },
+      label: { show: false }, data: [{ yAxis: 0 }]
+    };
+  }
+
+  function endDot(t, color, data) {
+    return {
+      type: 'scatter', name: '', data: data, symbolSize: 8, silent: true,
+      itemStyle: { color: color, borderColor: t.surface, borderWidth: 2 }, z: 5,
+      tooltip: { show: false }
+    };
+  }
+
+  function bands(t, base, top, picks) {
+    // Profit/loss washes: draw each stretch as its own area segment.
+    return [];
+  }
+
+  // ---------- chart builders ---------------------------------------------
+  function chartROI(t, days) {
+    var last = days[days.length - 1];
+    return {
+      color: [t.blue],
+      grid: gridCommon(),
+      xAxis: Object.assign({ type: 'time' }, axisCommon(t)),
+      yAxis: Object.assign({}, yAxisCommon(t, function (v) { return Math.round(v) + '%'; }), { scale: false }),
+      tooltip: Object.assign(tooltipCommon(t), {
+        formatter: function (params) {
+          var d = days[params[0].dataIndex];
+          return tooltipRows(prettyDate(d.date),[{ color: t.blue, name: 'Return on invested', value: pct(d.roi) }]);
+        }
+      }),
+      series: [
+        (function () {
+          var s = lineSeries(t, 'ROI', t.blue, days.map(function (d) { return [d.date, Number(d.roi.toFixed(3))]; }), true);
+          s.markLine = zeroLine(t);
+          return s;
+        })(),
+        endDot(t, t.blue, [[last.date, Number(last.roi.toFixed(3))]])
+      ]
+    };
+  }
+
+  function chartEquity(t, days) {
+    var last = days[days.length - 1];
+    return {
+      grid: gridCommon(),
+      xAxis: Object.assign({ type: 'time' }, axisCommon(t)),
+      yAxis: yAxisCommon(t, axisMoney),
+      tooltip: Object.assign(tooltipCommon(t), {
+        formatter: function (params) {
+          var d = days[params[0].dataIndex];
+          return tooltipRows(prettyDate(d.date),[{ color: t.aqua, name: 'Portfolio value', value: money(d.value) }]);
+        }
+      }),
+      series: [
+        lineSeries(t, 'Value', t.aqua, days.map(function (d) { return [d.date, Number(d.value.toFixed(2))]; }), true),
+        endDot(t, t.aqua, [[last.date, Number(last.value.toFixed(2))]])
+      ]
+    };
+  }
+
+  function chartValueVsCost(t, days) {
+    var last = days[days.length - 1];
+    return {
+      grid: gridCommon({ top: 30 }),
+      legend: legendCommon(t, ['Market value', 'Invested']),
+      xAxis: Object.assign({ type: 'time' }, axisCommon(t)),
+      yAxis: yAxisCommon(t, axisMoney),
+      tooltip: Object.assign(tooltipCommon(t), {
+        formatter: function (params) {
+          var d = days[params[0].dataIndex];
+          return tooltipRows(prettyDate(d.date),[
+            { color: t.aqua, name: 'Market value', value: money(d.value) },
+            { color: t.orange, name: 'Invested', value: money(d.invested) }
+          ]);
+        }
+      }),
+      series: [
+        {
+          type: 'line', name: 'Invested', data: days.map(function (d) { return [d.date, Number(d.invested.toFixed(2))]; }),
+          showSymbol: false, lineStyle: { width: 2, color: t.orange }, itemStyle: { color: t.orange }, z: 3
+        },
+        {
+          type: 'line', name: 'Market value', data: days.map(function (d) { return [d.date, Number(d.value.toFixed(2))]; }),
+          showSymbol: false, lineStyle: { width: 2, color: t.aqua }, itemStyle: { color: t.aqua },
+          areaStyle: { color: t.aqua, opacity: 0.08 }, z: 4
+        },
+        endDot(t, t.aqua, [[last.date, Number(last.value.toFixed(2))]])
+      ]
+    };
+  }
+
+  function chartDaily(t, days) {
+    var amounts = days.map(function (d) { return d.usd; });
+    var positives = amounts.filter(function (v) { return v > 0; }).sort(function (a, b) { return a - b; });
+    var top = Math.max.apply(null, amounts);
+    var baseline = positives.length ? positives[Math.floor(positives.length / 2)] : 0;
+    function nice(v) {
+      var steps = [5, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100, 150, 200, 250, 300, 400, 500, 750, 1000];
+      for (var i = 0; i < steps.length; i++) if (v <= steps[i]) return steps[i];
+      return Math.ceil(v / 500) * 500;
+    }
+    var split = null;
+    if (positives.length >= 10) {
+      // Use the 97th percentile rather than the max: the outlier days are
+      // exactly what we want to move above the break, not what we size to.
+      var p97 = positives[Math.min(positives.length - 1, Math.floor((positives.length - 1) * 0.97))];
+      var candidate = nice(p97 * 1.15);
+      if (top > candidate * 1.4) split = candidate;
+    }
+    var axisTop = nice(top);
+    var high = [], low = [], peak = null;
+    for (var i = 0; i < days.length; i++) {
+      var d = days[i];
+      var item = { value: [d.date, Number(d.usd.toFixed(2))], trades: d.trades };
+      if (!peak || d.usd > peak.usd) peak = d;
+      if (split != null && d.usd >= split) high.push(item); else low.push(item);
+    }
+
+    // The y-axis is pinned to a fixed pixel offset so the break marks below
+    // land exactly on the axis line.
+    var gridLeft = 46;
+    var grids, xAxes, yAxes, series, graphic = [];
+
+    if (split == null) {
+      grids = [gridCommon({ top: 14, left: gridLeft, bottom: 26, containLabel: false })];
+      xAxes = [Object.assign({ type: 'time' }, axisCommon(t))];
+      yAxes = [Object.assign({}, yAxisCommon(t, axisMoney), { min: 0, max: axisTop })];
+      series = [barSeries(t, low, 0, 0)];
+    } else {
+      var upperEnd = 0.29, lowerStart = 0.40;
+      var div = split % 4 === 0 ? 4 : (split % 3 === 0 ? 3 : 5);
+      grids = [
+        gridCommon({ top: 12, height: '24%', left: gridLeft, containLabel: false }),
+        gridCommon({ top: lowerStart * 100 + '%', bottom: 26, left: gridLeft, containLabel: false })
+      ];
+      xAxes = [
+        Object.assign({ type: 'time', gridIndex: 0 }, axisCommon(t), { axisLabel: { show: false }, axisLine: { show: false } }),
+        Object.assign({ type: 'time', gridIndex: 1 }, axisCommon(t))
+      ];
+      yAxes = [
+        {
+          type: 'value', gridIndex: 0, min: split, max: axisTop, interval: axisTop - split,
+          axisLine: { show: true, lineStyle: { color: t.axis, width: 1 } },
+          axisTick: { show: false }, splitLine: { show: false },
+          axisLabel: {
+            color: t.muted, fontSize: 11.5, margin: 10,
+            formatter: function (v) { return v === axisTop ? axisMoney(v) : ''; }
+          }
+        },
+        Object.assign({}, yAxisCommon(t, axisMoney), {
+          gridIndex: 1, min: 0, max: split, interval: split / div,
+          axisLine: { show: true, lineStyle: { color: t.axis, width: 1 } }
+        })
+      ];
+      series = [barSeries(t, high, 0, 0), barSeries(t, low, 1, 1)];
+
+      var el = document.getElementById('chart-daily');
+      var H = (el && el.clientHeight) || 258;
+      var gapY = (upperEnd + lowerStart) / 2 * H;
+      [-7, 7].forEach(function (dy) {
+        graphic.push({
+          type: 'line', silent: true, z: 10,
+          left: gridLeft - 9, top: gapY + dy - 4,
+          shape: { x1: 0, y1: 8, x2: 18, y2: 0 },
+          style: { stroke: t.axis, lineWidth: 1.4, lineCap: 'round' }
+        });
+      });
+      if (peak && peak.usd > 0) {
+        graphic.push({
+          type: 'text', silent: true, z: 10, right: 8, top: 2,
+          style: {
+            text: 'peak ' + money(peak.usd) + (peak.trades > 1 ? ' · ' + peak.trades + ' buys' : ''),
+            fill: t.muted, fontSize: 10.5
+          }
+        });
+      }
+    }
+
+    var barMark = series[series.length - 1];
+    if (baseline > 0) {
+      barMark.markLine = {
+        silent: true, symbol: 'none', animation: false,
+        lineStyle: { color: t.muted, width: 1, type: [4, 3], opacity: 0.85 },
+        label: {
+          position: 'insideEndTop', color: t.muted, fontSize: 10.5,
+          backgroundColor: t.surface, padding: [2, 4], borderRadius: 3,
+          formatter: 'median ' + money(baseline)
+        },
+        data: [{ yAxis: baseline }]
+      };
+    }
+
+    return {
+      grid: grids,
+      xAxis: xAxes,
+      yAxis: yAxes,
+      graphic: graphic,
+      axisPointer: { link: [{ xAxisIndex: 'all' }], lineStyle: { color: t.axis } },
+      tooltip: Object.assign(tooltipCommon(t), {
+        formatter: function (params) {
+          var item = params[0];
+          if (!item) return '';
+          var date = item.value[0];
+          var value = item.value[1];
+          var count = item.data.trades || 0;
+          var rows = [{ color: t.orange, name: 'Invested', value: money(value) }];
+          if (count > 1) rows.push({ color: t.muted, name: 'Trades that day', value: String(count) });
+          return tooltipRows(prettyDate(date), rows);
+        }
+      }),
+      series: series
+    };
+  }
+
+  function barSeries(t, data, xIndex, yIndex) {
+    return {
+      type: 'bar', xAxisIndex: xIndex, yAxisIndex: yIndex, data: data,
+      itemStyle: { color: t.orange, borderRadius: [2, 2, 0, 0] },
+      barMaxWidth: 7,
+      emphasis: { itemStyle: { color: t.orange, opacity: 0.75 } }
+    };
+  }
+
+  function chartBtc(t, days) {
+    var last = days[days.length - 1];
+    return {
+      grid: gridCommon(),
+      xAxis: Object.assign({ type: 'time' }, axisCommon(t)),
+      yAxis: yAxisCommon(t, function (v) { return v === 0 ? '0' : v.toFixed(3); }),
+      tooltip: Object.assign(tooltipCommon(t), {
+        formatter: function (params) {
+          var d = days[params[0].dataIndex];
+          return tooltipRows(prettyDate(d.date),[{ color: t.blue, name: 'BTC held', value: btc(d.coins) }]);
+        }
+      }),
+      series: [
+        lineSeries(t, 'BTC', t.blue, days.map(function (d) { return [d.date, Number(d.coins.toFixed(8))]; }), true),
+        endDot(t, t.blue, [[last.date, Number(last.coins.toFixed(8))]])
+      ]
+    };
+  }
+
+  function chartAvgCost(t, days) {
+    var last = days[days.length - 1];
+    var priced = days.filter(function (d) { return d.avgCost != null; });
+    return {
+      grid: gridCommon({ top: 30 }),
+      legend: legendCommon(t, ['BTC price', 'Average cost']),
+      xAxis: Object.assign({ type: 'time' }, axisCommon(t)),
+      yAxis: Object.assign({}, yAxisCommon(t, axisMoney), { scale: true }),
+      tooltip: Object.assign(tooltipCommon(t), {
+        formatter: function (params) {
+          var d = days[params[0].dataIndex];
+          return tooltipRows(prettyDate(d.date),[
+            { color: t.aqua, name: 'BTC price', value: money(d.price) },
+            { color: t.orange, name: 'Average cost', value: d.avgCost == null ? '—' : money(d.avgCost) }
+          ]);
+        }
+      }),
+      series: [
+        {
+          type: 'line', name: 'BTC price', data: days.map(function (d) { return [d.date, d.price]; }),
+          showSymbol: false, lineStyle: { width: 2, color: t.aqua }, itemStyle: { color: t.aqua }, z: 4
+        },
+        {
+          type: 'line', name: 'Average cost', data: priced.map(function (d) { return [d.date, Number(d.avgCost.toFixed(2))]; }),
+          showSymbol: false, lineStyle: { width: 2, color: t.orange }, itemStyle: { color: t.orange }, z: 5
+        },
+        endDot(t, t.aqua, [[last.date, last.price]])
+      ]
+    };
+  }
+
+  function chartCompare(t, days) {
+    var last = days[days.length - 1];
+    var ts = days.map(function (d) { return d.date; });
+    return {
+      grid: gridCommon({ top: 30 }),
+      legend: legendCommon(t, ['Smart DCA (AHR999)', 'Regular DCA']),
+      xAxis: Object.assign({ type: 'time' }, axisCommon(t)),
+      yAxis: Object.assign({}, yAxisCommon(t, function (v) { return Math.round(v) + '%'; })),
+      tooltip: Object.assign(tooltipCommon(t), {
+        formatter: function (params) {
+          var i = params[0].dataIndex;
+          var d = days[i];
+          var gap = d.roi - d.regRoi;
+          return tooltipRows(prettyDate(d.date),[
+            { color: t.blue, name: 'Smart DCA', value: pct(d.roi) },
+            { color: t.orange, name: 'Regular DCA', value: pct(d.regRoi) },
+            { color: t.muted, name: 'Advantage', value: pct(gap, 2) }
+          ]);
+        }
+      }),
+      series: [
+        {
+          type: 'line', name: 'Regular DCA', data: days.map(function (d) { return [d.date, Number(d.regRoi.toFixed(3))]; }),
+          showSymbol: false, lineStyle: { width: 1.6, color: t.orange, type: [4, 3] }, itemStyle: { color: t.orange }, z: 3
+        },
+        lineSeries(t, 'Smart DCA (AHR999)', t.blue, days.map(function (d) { return [d.date, Number(d.roi.toFixed(3))]; }), false),
+        endDot(t, t.blue, [[last.date, Number(last.roi.toFixed(3))]])
+      ]
+    };
+  }
+
+  function legendCommon(t, items) {
+    return {
+      show: true, top: 0, left: 0, itemGap: 16, icon: 'roundRect', itemWidth: 12, itemHeight: 3,
+      textStyle: { color: t.muted, fontSize: 11.5 }
+    };
+  }
+
+  // ---------- assembly ----------------------------------------------------
+  var PANELS = [
+    { id: 'roi', title: 'Return on Investment', sub: 'Unrealised return on total invested', build: chartROI, kicker: function (s) { return pct(s.roi); } },
+    { id: 'equity', title: 'Portfolio Equity Curve', sub: 'Holdings marked at the latest price', build: chartEquity, kicker: function (s) { return money(s.value); } },
+    { id: 'vvc', title: 'Portfolio Value vs. Cost', sub: 'Market value against money put in', build: chartValueVsCost, kicker: function (s) { return signedMoney(s.gain); }, kickerClass: function (s) { return s.gain >= 0 ? 'up' : 'down'; } },
+    { id: 'daily', title: 'Daily Investment', sub: 'What the bot spent each day', build: chartDaily, kicker: function (s) { return 'median ' + money(s.baseline) + ' / day'; } },
+    { id: 'btc', title: 'BTC Accumulation', sub: 'Coins accumulated over time', build: chartBtc, kicker: function (s) { return btc(s.coins) + ' BTC'; } },
+    { id: 'cost', title: 'BTC Price vs. Average Cost', sub: 'Entry price against the market', build: chartAvgCost, kicker: function (s) { return money(s.price) + ' vs ' + money(s.avgCost); } },
+    { id: 'compare', title: 'Smart DCA vs. Regular DCA', sub: 'Same median amount, every calendar day', build: chartCompare, kicker: function (s) { return pct(s.advantage, 2) + ' pp ahead'; }, wide: true }
+  ];
+
+  var charts = {};
+  var daily = null;
+  var state = { days: 0 };
+
+  function buildShell() {
+    var cards = document.getElementById('cards');
+    cards.innerHTML = '';
+    PANELS.forEach(function (p) {
+      var article = document.createElement('article');
+      article.className = 'card' + (p.wide ? ' wide' : '');
+      var head = document.createElement('div');
+      head.className = 'card-head';
+      var h2 = document.createElement('h2');
+      h2.textContent = p.title;
+      var kicker = document.createElement('span');
+      kicker.className = 'kicker';
+      kicker.id = 'kicker-' + p.id;
+      head.appendChild(h2); head.appendChild(kicker);
+      var sub = document.createElement('p');
+      sub.className = 'card-sub';
+      sub.textContent = p.sub;
+      var chart = document.createElement('div');
+      chart.className = 'chart' + (p.wide ? ' tall' : '');
+      chart.id = 'chart-' + p.id;
+      chart.setAttribute('role', 'img');
+      chart.setAttribute('aria-label', p.title);
+      article.appendChild(head); article.appendChild(sub); article.appendChild(chart);
+      cards.appendChild(article);
+    });
+  }
+
+  function buildTiles(s) {
+    var tiles = [
+      { label: 'Invested', value: money(s.invested), note: s.buyDays + ' buy days' },
+      { label: 'Holdings', value: btc(s.coins) + ' BTC', note: 'worth ' + money(s.value) },
+      { label: 'Return', value: pct(s.roi), note: signedMoney(s.gain), cls: s.gain >= 0 ? 'up' : 'down' },
+      { label: 'BTC price', value: money(s.price), note: 'avg cost ' + money(s.avgCost) },
+      { label: 'vs flat DCA', value: pct(s.advantage, 2) + ' pp', note: signedMoney(s.gainAdvantage), cls: s.advantage >= 0 ? 'up' : 'down' }
+    ];
+    var root = document.getElementById('tiles');
+    root.innerHTML = '';
+    tiles.forEach(function (tile) {
+      var el = document.createElement('div');
+      el.className = 'tile';
+      var label = document.createElement('div');
+      label.className = 'label'; label.textContent = tile.label;
+      var value = document.createElement('div');
+      value.className = 'value ' + (tile.cls || '');
+      value.textContent = tile.value;
+      var note = document.createElement('div');
+      note.className = 'note'; note.textContent = tile.note;
+      el.appendChild(label); el.appendChild(value); el.appendChild(note);
+      root.appendChild(el);
+    });
+  }
+
+  function buildTable(days) {
+    var tbody = document.querySelector('#data-table tbody');
+    tbody.innerHTML = '';
+    var frag = document.createDocumentFragment();
+    for (var i = days.length - 1; i >= 0; i--) {
+      var d = days[i];
+      var tr = document.createElement('tr');
+      [d.date, money(d.usd), btc(d.coins), money(d.price), money(d.value), pct(d.roi), String(d.trades)]
+        .forEach(function (text, index) {
+          var td = document.createElement('td');
+          td.textContent = text;
+          if (index === 5) td.className = d.roi >= 0 ? 'up' : 'down';
+          tr.appendChild(td);
+        });
+      frag.appendChild(tr);
+    }
+    tbody.appendChild(frag);
+  }
+
+  function visibleDays() {
+    if (!state.days) return daily.days;
+    var cutoff = addDays(daily.days[daily.days.length - 1].date, -state.days);
+    return daily.days.filter(function (d) { return d.date >= cutoff; });
+  }
+
+  function render() {
+    var t = tokens();
+    var days = visibleDays();
+    var s = stats(days);
+
+    buildTiles(s);
+    PANELS.forEach(function (p) {
+      var kicker = document.getElementById('kicker-' + p.id);
+      kicker.textContent = p.kicker(s);
+      kicker.className = 'kicker' + (p.kickerClass ? ' ' + p.kickerClass(s) : (p.id === 'roi' ? (s.roi >= 0 ? ' up' : ' down') : ''));
+      kicker.classList.add('strong');
+
+      var el = document.getElementById('chart-' + p.id);
+      if (!charts[p.id]) charts[p.id] = echarts.init(el, null, { renderer: 'canvas' });
+      var option = p.build(t, days);
+      option.animation = true;
+      option.animationDurationUpdate = 280;
+      option.textStyle = { fontFamily: 'Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' };
+      option.backgroundColor = 'transparent';
+      charts[p.id].setOption(option, true);
+    });
+    buildTable(days);
+  }
+
+  function applyRange(days) {
+    state.days = days;
+    document.querySelectorAll('#range-buttons button').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(Number(b.dataset.days) === days));
+    });
+    render();
+  }
+
+  // ---------- bootstrap ---------------------------------------------------
+  function fail(message) {
+    document.getElementById('root').innerHTML = '<div class="error">' + message + '</div>';
+  }
+
+  function boot() {
+    var saved = localStorage.getItem('dca-theme');
+    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.setAttribute('data-theme', saved || (prefersDark ? 'dark' : 'light'));
+
+    fetch('trade_log.csv', { cache: 'no-store' })
+      .then(function (res) { if (!res.ok) throw new Error('HTTP ' + res.status); return res.text(); })
+      .then(function (text) {
+        var rows = parseCsv(text);
+        if (!rows.length) throw new Error('empty trade log');
+        daily = buildDaily(rows);
+        if (daily.days.length < 2) throw new Error('not enough history yet');
+
+        document.getElementById('subtitle').textContent =
+          'AHR999 adaptive strategy · ' + daily.days[0].date + ' → ' + daily.days[daily.days.length - 1].date +
+          ' · ' + daily.days.length + ' days';
+
+        buildShell();
+        render();
+
+        document.querySelectorAll('#range-buttons button').forEach(function (b) {
+          b.addEventListener('click', function () { applyRange(Number(b.dataset.days)); });
+        });
+        document.getElementById('theme-toggle').addEventListener('click', function () {
+          var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+          document.documentElement.setAttribute('data-theme', next);
+          localStorage.setItem('dca-theme', next);
+          render();
+        });
+
+        var resize;
+        window.addEventListener('resize', function () {
+          clearTimeout(resize);
+          resize = setTimeout(function () {
+            Object.keys(charts).forEach(function (k) { charts[k].resize(); });
+          }, 120);
+        });
+      })
+      .catch(function (err) {
+        fail('Could not load <code>trade_log.csv</code> (' + err.message + '). '
+          + 'If you opened this file directly from disk, serve the folder instead — '
+          + '<code>python3 -m http.server</code> — so the browser is allowed to read the CSV.');
+      });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+</script>
+</body>
+</html>

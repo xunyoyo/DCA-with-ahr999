@@ -1,6 +1,8 @@
 # 比特币定投机器人 - 基于AHR999指标
 
-![Pic](./dashboard_comprehensive.png)
+[![仪表盘](./dashboard_comprehensive.png)](https://xunyoyo.github.io/DCA-with-ahr999/)
+
+> 点上面的图，打开**可交互版本**：鼠标划过去能看到每一天的买入金额、持仓和收益，右上角可以切最近 1 年 / 6 个月 / 3 个月，还支持深色模式和完整数据表。交互版每次打开都现读最新的 `trade_log.csv`，图表没重新生成也能看到当天数据。
 
 ## 这是什么？
 
@@ -48,6 +50,7 @@ AHR999是一个判断比特币贵不贵的指标，数值越小说明越便宜�
 
 - **全自动交易**：通过GitHub Actions免费云服务器，每天自动运行
 - **可视化图表**：自动生成7张图表，包括收益曲线、持仓变化、策略对比等
+- **可交互仪表盘**：同一套图表还有网页版，能悬停查看、切换时间范围、切换深浅色
 - **交易记录**：所有买入记录保存在CSV文件，方便导出分析
 - **运行报告**：每次运行结果会自动发到GitHub Issue
 
@@ -167,6 +170,9 @@ A：进入Actions页面，点击工作流，右上角有"Disable workflow"按钮
 **Q：我的交易记录别人能看到吗？**
 A：如果你的项目是Public（公开），别人能看到你的交易记录CSV和图表。建议把项目改成Private（私有），或者把 `trade_log.csv` 和 `*.png` 添加到 `.gitignore` 文件里。
 
+**Q：我能用自己的可交互仪表盘吗？**
+A：能。Fork 之后去项目 **Settings → Pages**，Source 选 **Deploy from a branch**，分支选 `main`、目录选 `/docs`，保存即可。几分钟后访问 `https://你的用户名.github.io/DCA-with-ahr999/`，看到的就是你自己的数据。
+
 **特别提醒**：Fork之后记得先删除原作者的 `trade_log.csv` 文件，否则你的交易记录会混在原作者的数据里。
 
 **Q：手续费怎么算？**
@@ -241,14 +247,15 @@ python trade_bot.py
 
 ### 图表主题
 
-程序支持三种图表风格：
-- `light`：白底简约风（默认）
+程序支持四种图表风格：
+- `professional`：白底专业风（默认）
+- `light`：白底简约风
 - `midnight`：深色酷炫风
 - `neon`：科技霓虹风
 
 在GitHub配置：
 - Name：`DCA_CHART_THEME`
-- Secret：填 `light`、`midnight` 或 `neon`
+- Secret：填 `professional`、`light`、`midnight` 或 `neon`
 
 本地运行加一行环境变量：
 ```bash
@@ -277,6 +284,9 @@ PAUSE_THRESHOLD = 2.0        # 暂停阈值（AHR999超过这个就不买）
 DCA-with-ahr999/
 ├── .github/workflows/
 │   └── main.yml                    # GitHub Actions配置
+├── docs/
+│   ├── index.html                  # 可交互仪表盘（GitHub Pages）
+│   └── trade_log.csv               # 网页读的数据副本（自动同步）
 ├── trade_bot.py                    # 主程序
 ├── requirements.txt                # Python依赖
 ├── trade_log.csv                   # 交易记录（运行后生成）
