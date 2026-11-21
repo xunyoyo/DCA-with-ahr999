@@ -798,13 +798,38 @@
     document.getElementById('root').innerHTML = '<div class="error">' + message + '</div>';
   }
 
+  // On GitHub Pages the deployed snapshot only refreshes when Pages rebuilds,
+  // and a workflow push with the default GITHUB_TOKEN does not trigger one.
+  // Read the CSV straight from the branch instead so today's trade shows up.
+  function csvUrls() {
+    var urls = [];
+    if (/(^|\.)github\.io$/.test(location.hostname)) {
+      var owner = location.hostname.split('.')[0];
+      var repo = location.pathname.split('/').filter(Boolean)[0];
+      if (owner && repo) {
+        urls.push('https://raw.githubusercontent.com/' + owner + '/' + repo + '/main/docs/trade_log.csv');
+      }
+    }
+    urls.push('trade_log.csv');
+    return urls;
+  }
+
+  function loadCsv(urls, i) {
+    return fetch(urls[i], { cache: 'no-store' }).then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.text();
+    }).catch(function (err) {
+      if (i + 1 < urls.length) return loadCsv(urls, i + 1);
+      throw err;
+    });
+  }
+
   function boot() {
     var saved = localStorage.getItem('dca-theme');
     var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
     document.documentElement.setAttribute('data-theme', saved || (prefersDark ? 'dark' : 'light'));
 
-    fetch('trade_log.csv', { cache: 'no-store' })
-      .then(function (res) { if (!res.ok) throw new Error('HTTP ' + res.status); return res.text(); })
+    loadCsv(csvUrls(), 0)
       .then(function (text) {
         var rows = parseCsv(text);
         if (!rows.length) throw new Error('empty trade log');
